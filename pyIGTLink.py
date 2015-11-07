@@ -8,6 +8,166 @@ Created on Tue Nov  3 19:17:05 2015
  IGTL_IMAGE_HEADER_VERSION = 1
 
 
+class pyDataExport(SocketServer.TCPServer):
+        """ For streaming data over TCP with GE-protocol"""
+        def __init__(self,protocolVer=3,port=6543,localServer=False):
+                """
+                protocolVer - version of streaming protocol, latest will always be default
+                              protocolVer=1:
+                                ProtocolVersionRev     2
+                                ProtocolVersionYear  2013
+                                ProtocolVersionDay     04
+                                ProtocolVersionMonth   03
+                
+                              protocolVer=2:
+                                ProtocolVersionRev     2
+                                ProtocolVersionYear  2013
+                                ProtocolVersionDay     22
+                                ProtocolVersionMonth   05
+
+                              protocolVer=3:
+
+                port - port number
+                
+                """
+                buffer_size=100
+
+                if localServer:
+                        host="127.0.0.1"
+                else:
+                        if sys.platform.startswith('win32'):
+                                host = socket.gethostbyname(socket.gethostname())
+                        elif sys.platform.startswith('linux'):
+                                import fcntl
+                                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                                try:
+                                        ifname='eth0'
+                                        host= socket.inet_ntoa(fcntl.ioctl( s.fileno(), 0x8915, struct.pack('256s', ifname[:15])  )[20:24])
+                                        #http://code.activestate.com/recipes/439094-get-the-ip-address-associated-with-a-network-inter/
+                                except:
+                                        ifname='lo'
+                                        host= socket.inet_ntoa(fcntl.ioctl( s.fileno(), 0x8915, struct.pack('256s', ifname[:15])  )[20:24])
+
+                SocketServer.TCPServer.allow_reuse_address = True
+                SocketServer.TCPServer.__init__(self,(host, port), TCPRequestHandler)
+
+
+                self._protocolVer=protocolVer
+
+                self._packet_queue=collections.deque(maxlen=buffer_size)
+                self._lock_packet_queue = threading.Lock()
+
+                self._connected=False
+                self._shuttingDown=False
+                self._lock_connected_shuttingDown = threading.Lock()
+
+                signal.signal(signal.SIGTERM, self._SignalHandler)
+                signal.signal(signal.SIGINT, self._SignalHandler)
+                
+
+                server_thread = threading.Thread(target=self.serve_forever)
+                server_thread.daemon = True
+                server_thread.start()
+
+                thread = threading.Thread(target=self._PrintIpAdressAndPortNo)
+                thread.daemon = True
+                thread.start()
+
+
+        def GetIpAdress(self):
+                return self.server_address[0]
+
+        def GetPortNo(self):
+                return self.server_address[1] 
+
+        def AddPacketToSendQueue(self,packet,wait=False):
+                """
+                Returns True if sucessfull
+                """
+                if not isinstance(packet,Packet) or not packet.IsValid():
+                        _Print("Warning: Only accepts valid packets of class Packet")
+                        return False
+        
+                if self._connected:
+                        with self._lock_packet_queue:
+                                self._packet_queue.append(packet)#copy.deepcopy(packet))
+	                while wait and len(self._packet_queue)>0:
+	                        time.sleep(0.001)
+
+                        return True
+                else:
+                        if len(self._packet_queue)>0:
+                                with self._lock_packet_queue:
+                                        self._packet_queue=collections.clear()
+                        return False
+
+
+        def _SignalHandler(self,signum,stackframe):
+                if signum == signal.SIGTERM or signum == signal.SIGINT: 
+                        with self._lock_connected_shuttingDown:
+                                self._shuttingDown=True
+                        self.CloseConnection()
+                        _Print('YOU KILLED ME, BUT I CLOSED THE SERVER BEFORE I DIED')
+                        sys.exit(signum)
+                        
+
+        def isConnected(self):
+               return self._connected
+
+
+        def CloseConnection(self):
+                """Will close connection and shutdown server"""
+                self._connected=False
+                with self._lock_connected_shuttingDown:
+                        self._shuttingDown=True
+                self.shutdown()
+                _Print( "\nServer closed\n")
+
+        def _PrintIpAdressAndPortNo(self):
+                while True:
+                        while not self._connected:
+                                with self._lock_connected_shuttingDown:
+                                        if self._shuttingDown:
+                                                break
+                                _Print("No connections\nIp adress: " +str(self.GetIpAdress()) +"\nPort number: " +str(self.GetPortNo()))
+                                time.sleep(5)
+                        
+                        time.sleep(10)
+                        with self._lock_connected_shuttingDown:
+                                if self._shuttingDown:
+                                        break
+
+
+
+class TCPRequestHandler(SocketServer.BaseRequestHandler):
+        """
+        Help class for pyDataExport
+        """
+        def handle(self):
+                self.server._connected=True
+                while True :
+                        if len(self.server._packet_queue)>0:
+                                with self.server._lock_packet_queue:
+                                        packet=self.server._packet_queue.popleft()
+                                        response_data=packet.GetBinaryPacket(self.server._protocolVer)
+                                        #print "Send: " + str(packet._timestamp)
+                                try:
+                                        self.request.sendall(response_data)
+                                except Exception as inst:
+                                        self.server._connected=False
+                                        _Print('ERROR, FAILED TO SEND DATA' )
+                                        print inst.args
+                                        return
+                        else:
+                                time.sleep(1/1000.0)
+                                with self.server._lock_connected_shuttingDown:
+                                        if self.server._shuttingDown:
+                                                break
+
+
+
+
+
 class Packet(object):
     pass
 
@@ -15,158 +175,4 @@ class Packet(object):
 
 #http://openigtlink.org/protocols/v2_header.html
 class ImageMessage(Packet):   
-#    
-#  # Sets image dimensions by an array of the numbers of pixels in i, j and k directions.
-#  # SetDimensions() should be called prior to SetSubVolume(), since SetDimensions()
-#  # sets subvolume parameters automatically assuming that subvolume = entire volume.
-#  def SetDimensions(int s[3]):
-#
-#  # Sets image dimensions by the numbers of pixels in i, j and k directions.
-#  # SetDimensions() should be called prior to SetSubVolume(), since SetDimensions()
-#  # sets subvolume parameters automatically assuming that subvolume = entire volume.
-#  def SetDimensions(int i, int j, int k):
-#
-#  # Gets image dimensions as an array of the numbers of pixels in i, j and k directions.
-#  def GetDimensions(int s[3]):
-#
-#  # Gets image dimensions as the numbers of pixels in i, j and k directions.
-#  def GetDimensions(int &i, int &j, int &k):
-#  
-#  # Sets sub-volume dimensions and offset by arrays of the dimensions and the offset.
-#  # SetSubVolume() should be called after calling SetDiemensions(), since SetDimensions()
-#  # reset the subvolume parameters automatically. Returns non-zero value if the subvolume
-#  # is successfully specified. Returns zero, if invalid subvolume is specified.
-#  def SetSubVolume(int dim[3], int off[3]):
-#
-#  # Sets sub-volume dimensions and offset by the dimensions and the offset in i, j and k
-#  # directions. SetSubVolume() should be called after calling SetDiemensions(),
-#  # since SetDimensions() reset the subvolume parameters automatically.
-#  # Returns non-zero value if the subvolume is successfully specified. 
-#  # Returns zero, if invalid subvolume is specified.
-#  def SetSubVolume(int dimi, int dimj, int dimk, int offi, int offj, int offk):
-#
-#  # Gets sub-volume dimensions and offset using arrays of the dimensions and the offset.
-#  def GetSubVolume(int dim[3], int off[3]):
-#
-#  # Gets sub-volume dimensions and offset by the dimensions and the offset in i, j and k
-#  # directions.
-#  def GetSubVolume(int &dimi, int &dimj, int &dimk, int &offi, int &offj, int &offk):
-#
-#  # Sets spacings by an array of spacing values in i, j and k directions.
-#  def SetSpacing(float s[3]):
-#
-#  # Sets spacings by spacing values in i, j and k directions.
-#  def SetSpacing(float si, float sj, float sk):
-#
-#  # Gets spacings using an array of spacing values in i, j and k directions.
-#  def GetSpacing(float s[3]):
-#
-#  # Gets spacings using spacing values in i, j and k directions.
-#  def GetSpacing(float &si, float &sj, float &sk):
-#
-#  # Sets the coordinates of the origin by an array of positions along the first (R or L),
-#  # second (A or P) and the third (S) axes.
-#  def SetOrigin(float p[3]):
-#
-#  # Sets the coordinates of the origin by positions along the first (R or L), second (A or P)
-#  # and the third (S) axes.
-#  def SetOrigin(float px, float py, float pz):
-#
-#  # Gets the coordinates of the origin using an array of positions along the first (R or L),
-#  # second (A or P) and the third (S) axes.
-#  def GetOrigin(float p[3]):
-#
-#  # Gets the coordinates of the origin by positions along the first (R or L), second (A or P)
-#  # and the third (S) axes.
-#  def GetOrigin(float &px, float &py, float &pz):
-#
-#  # Sets the orientation of the image by an array of the normal vectors for the i, j
-#  # and k indeces.
-#  def SetNormals(float o[3][3]):
-#
-#  # Sets the orientation of the image by the normal vectors for the i, j and k indeces.
-#  def SetNormals(float t[3], float s[3], float n[3]):
-#
-#  # Gets the orientation of the image using an array of the normal vectors for the i, j
-#  # and k indeces.
-#  def GetNormals(float o[3][3]):
-#
-#  # Gets the orientation of the image using the normal vectors for the i, j and k indeces.
-#  def GetNormals(float t[3], float s[3], float n[3]):
-#
-#  # Sets the number of components for each voxel.
-#  def SetNumComponents(int num):
-#
-#  # Gets the number of components for each voxel.
-#  def GetNumComponents():
-#
-#  # Sets the origin/orientation matrix.
-#  def SetMatrix(Matrix4x4& mat):
-#
-#  # Gets the origin/orientation matrix.
-#  def GetMatrix(Matrix4x4& mat):
-#
-#  # Sets the image scalar type.
-#  def SetScalarType(int t)    { scalarType = t: }:
-#
-#  # Sets the image scalar type to 8-bit integer.
-#  def SetScalarTypeToInt8()   { scalarType = TYPE_INT8: }:
-#
-#  # Sets the image scalar type to unsigned 8-bit integer.
-#  def SetScalarTypeToUint8()  { scalarType = TYPE_UINT8: }:
-#
-#  # Sets the image scalar type to 16-bit integer.
-#  def SetScalarTypeToInt16()  { scalarType = TYPE_INT16: }:
-#
-#  # Sets the image scalar type to unsigned 16-bit integer.
-#  def SetScalarTypeToUint16() { scalarType = TYPE_UINT16: }:
-#
-#  # Sets the image scalar type to 32-bit integer.
-#  def SetScalarTypeToInt32()  { scalarType = TYPE_INT32: }:
-#
-#  # Sets the image scalar type to unsigned 32-bit integer.
-#  def SetScalarTypeToUint32() { scalarType = TYPE_UINT32: }:
-#
-#  # Gets the image scalar type.
-#  def  GetScalarType()         { return scalarType: }:
-#
-#  # Gets the size of the scalar type used in the current image data.
-#  # (e.g. 1 byte for 8-bit integer)
-#  int  GetScalarSize()         { return ScalarSizeTable[scalarType]: }:
-#
-#  # Gets the size of the specified scalar type. (e.g. 1 byte for 8-bit integer)
-#  int  GetScalarSize(int type) { return ScalarSizeTable[type]: }:
-#
-#  # Sets the Endianess of the image scalars. (default is ENDIAN_BIG)
-#  def SetEndian(int e)        { endian = e: }:
-#
-#  # Gets the Endianess of the image scalars.
-#  int  GetEndian()             { return endian: }:
-#
-#  # Gets the size (length) of the byte array for the image data.
-#  # The size is defined by dimensions[0]*dimensions[1]*dimensions[2]*scalarSize*numComponents.
-#  # TODO: Should returned value be 64-bit integer?
-#  int  GetImageSize()
-#  {
-#    return dimensions[0]*dimensions[1]*dimensions[2]*GetScalarSize()*numComponents:
-#  }:
-#
-#  # Returns coordinate system (COORDINATE_RAS or COORDINATE_LPS)
-#  int GetCoordinateSystem() { return coordinate:}:
-#
-#  # Sets coordinate system (COORDINATE_RAS or COORDINATE_LPS)
-#  def SetCoordinateSystem(int c) {coordinate = c:}:
-#
-#
-#  # Gets the size (length) of the byte array for the subvolume image data.
-#  # The size is defined by subDimensions[0]*subDimensions[1]*subDimensions[2]*
-#  # scalarSize*numComponents.
-#  def  GetSubVolumeImageSize():
-#
-#
-#  # Allocates a memory area for the scalar data based on the dimensions of the subvolume,
-#  # the number of components, and the scalar type.
-#  def  AllocateScalars():
-#
-#  # Gets a pointer to the scalar data.
-#  def GetScalarPointer():
+\
