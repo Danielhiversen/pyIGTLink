@@ -207,7 +207,6 @@ class MessageBase(object):
     def GetBodyPackSize(self):
         raise RuntimeError('Should be implemented in child class')
 
-
     def IsValid(self):
         return self._validMessage
 
@@ -243,8 +242,11 @@ class ImageMessage(MessageBase):
         else:
             return
         binaryMessage = binaryMessage + struct.pack(self._endian+"I",s) 
-        binaryMessage = binaryMessage + struct.pack(self._endian+"I",1)  # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
-
+        if self._data.byteorder == "<":        
+            binaryMessage = binaryMessage + struct.pack(self._endian+"I",1)  # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
+        else:
+            binaryMessage = binaryMessage + struct.pack(self._endian+"I",2)  # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
+            
         binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape)  
 
         return binaryMessage
