@@ -171,7 +171,7 @@ class MessageBase(object):
         self._version = IGTL_HEADER_VERSION  # Version number The version number field specifies the header format version. Currently the version number is 1. Please note that this is different from the protocol version.
         self._name = ""                      # The type name field is an ASCII character string specifying the type of the data contained in the message body e.g. “TRANSFORM”. The length of the type name must be within 12 characters.
         self._device_name = ""               # The device name field contains an ASCII character string specifying the name of the the message.
-        self._timestamp = 0	                # The timestamp field contains a 64-bit timestamp indicating when the data is generated. Please refer http://openigtlink.org/protocols/v2_timestamp.html for the format of the 64-bit timestamp.
+        self._timestamp = int(time.time())	                # The timestamp field contains a 64-bit timestamp indicating when the data is generated. Please refer http://openigtlink.org/protocols/v2_timestamp.html for the format of the 64-bit timestamp.
 
         self._endian = ">"                   # big-endian
 
@@ -183,7 +183,7 @@ class MessageBase(object):
         binaryMessage = struct.pack(self._endian+"H",self._version)
         binaryMessage = binaryMessage + struct.pack(self._endian+"12s",str(self._name))
         binaryMessage = binaryMessage + struct.pack(self._endian+"20s",str(self._device_name))
-        binaryMessage = binaryMessage + struct.pack(self._endian+"Q",self._timestamp)
+        binaryMessage = binaryMessage + struct.pack(self._endian+"II",self._timestamp,0)
         binaryMessage = binaryMessage + struct.pack(self._endian+"Q",body_size)
         binaryMessage = binaryMessage + struct.pack(self._endian+"Q",crc)
         binaryMessage = binaryMessage + binaryBody
@@ -247,13 +247,10 @@ class ImageMessage(MessageBase):
             
         self._spacing = spacing
         self._matrix = np.identity(4) #A matrix representing the origin and the orientation of the image.
-        self._bodyPackSize = None
 
     def PackBody(self):
         binaryMessage = struct.pack(self._endian+"H",IGTL_IMAGE_HEADER_VERSION)
         binaryMessage = binaryMessage + struct.pack(self._endian+"B",1) # Number of Image Components (1:Scalar, >1:Vector). (NOTE: Vector data is stored fully interleaved.)
-
-
         binaryMessage = binaryMessage + struct.pack(self._endian+"B",self._datatype_s) 
 
         if self._data.dtype.byteorder == "<":        
