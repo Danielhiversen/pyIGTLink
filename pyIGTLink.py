@@ -144,9 +144,9 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
                     #print "Send: " + str(message._timestamp)
                     try:
                         self.request.sendall(response_data)
-                    except Exception as inst:
+                    except Exception as e:
                         self.server._connected=False
-                        _Print('ERROR, FAILED TO SEND DATA. \n'+inst.args )
+                        _Print('ERROR, FAILED TO SEND DATA. \n'+str(e) )
                         return
             else:
                 time.sleep(1/1000.0)
@@ -156,12 +156,13 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
 
 #Help functions and help classes:
 def _Print(text):
-    print "********PyIGTLink********\n" + text +"\n****************************"
+    print "********PyIGTLink********\n" + text +"\n****************************\n"
      
 
 # http://slicer-devel.65872.n3.nabble.com/OpenIGTLinkIF-and-CRC-td4031360.html    
 crc64 = crcmod.mkCrcFun(0x142F0E1EBA9EA3693, rev=False, initCrc=0x0000000000000000, xorOut=0x0000000000000000)    
 
+# http://openigtlink.org/protocols/v2_header.html
 class MessageBase(object):
     """message"""
     def __init__(self):
@@ -200,9 +201,9 @@ class MessageBase(object):
 
 
 
-#http://openigtlink.org/protocols/v2_header.html
+# http://openigtlink.org/protocols/v2_image.html
 class ImageMessage(MessageBase):   
-    def __init__(self,data,spacing=1):
+    def __init__(self,data,spacing=[1, 1, 1]):
         MessageBase.__init__(self)
         self._validMessage = True        
         self._name = "IMAGE"
@@ -236,11 +237,13 @@ class ImageMessage(MessageBase):
             self._format_data = "f"
         elif self._data.dtype == np.float64:
             self._datatype_s=11
-            self._format_data = "d"
+            self._format_data = "f"
         else:
-            self._data  = np.array(self._data , dtype=np.int8)            
-            self._datatype_s=2
-            self._format_data = "b"
+            pass
+        self._data  = np.array(self._data , dtype=np.int8)            
+        self._datatype_s=2
+        self._format_data = "b"
+            
             
         self._spacing = spacing
         self._matrix = np.identity(4) #A matrix representing the origin and the orientation of the image.
@@ -253,10 +256,13 @@ class ImageMessage(MessageBase):
 
         binaryMessage = binaryMessage + struct.pack(self._endian+"B",self._datatype_s) 
 
-        if self._data.byteorder == "<":        
-            binaryMessage = binaryMessage + struct.pack(self._endian+"B",1)  # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
-        else:
+        if self._data.dtype.byteorder == "<":        
+            fmt = "<"
             binaryMessage = binaryMessage + struct.pack(self._endian+"B",2)  # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
+        else:
+            self._data.dtype.byteorder== ">"
+            fmt = ">"
+            binaryMessage = binaryMessage + struct.pack(self._endian+"B",1)  # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
             
         binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape[0])  
         binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape[1])  
@@ -300,9 +306,13 @@ class ImageMessage(MessageBase):
         else:
             binaryMessage = binaryMessage + struct.pack(self._endian+"H",1) 
 
-
-        fmt=self._data.byteorder+self._format_data*len(self._data)
-        binaryMessage = binaryMessage + struct.pack(fmt,*self._data)
+        data=self._data
+        data.resize(data.size,1)
+        fmt=fmt+self._format_data*len(data)
+        print self._format_data
+        print self._data.dtype
+        print fmt[0:20]
+        binaryMessage = binaryMessage + struct.pack(fmt,*data)
 
         IGTL_IMAGE_HEADER_SIZE =72
 
