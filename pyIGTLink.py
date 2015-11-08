@@ -156,7 +156,7 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
 
 #Help functions and help classes:
 def _Print(text):
-    print "********PyIGTLink********\n" + text +"\n****************************\n"
+    print "********PyIGTLink********\n" + text +"\n****************************"
      
 
 # http://slicer-devel.65872.n3.nabble.com/OpenIGTLinkIF-and-CRC-td4031360.html    
@@ -259,7 +259,9 @@ class ImageMessage(MessageBase):
         else:
             self._data.dtype.byteorder== ">"
             fmt = ">"
-            binaryMessage = binaryMessage + struct.pack(self._endian+"B",1)  # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
+            binaryMessage = binaryMessage + struct.pack(self._endian+"B",1) # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
+            
+        binaryMessage = binaryMessage + struct.pack(self._endian+"B",1) # image coordinate (1:RAS 2:LPS)            
             
         binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape[0])  
         binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape[1])  
@@ -306,19 +308,11 @@ class ImageMessage(MessageBase):
         data=self._data
         data.resize(data.size,1)
         fmt=fmt+self._format_data*len(data)
-        print self._format_data
-        print self._data.dtype
-        print fmt[0:20]
+        print "--------------"
+        print len(binaryMessage)
         binaryMessage = binaryMessage + struct.pack(fmt,*data)
 
-        IGTL_IMAGE_HEADER_SIZE =72
-
-        self._bodyPackSize = struct.calcsize(fmt)+IGTL_IMAGE_HEADER_SIZE
-
-        print self._bodyPackSize
-        print len(binaryMessage)
-
-
+        self._bodyPackSize = len(binaryMessage)
         return binaryMessage
 
     def GetBodyPackSize(self):
