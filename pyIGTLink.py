@@ -145,8 +145,7 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
                         self.request.sendall(response_data)
                     except Exception as inst:
                         self.server._connected=False
-                        _Print('ERROR, FAILED TO SEND DATA' )
-                        print inst.args
+                        _Print('ERROR, FAILED TO SEND DATA. \n'+inst.args )
                         return
             else:
                 time.sleep(1/1000.0)
@@ -179,7 +178,7 @@ class MessageBase(object):
     def Pack(self):
         binaryBody = self.PackBody()
         self._body_size = self.GetBodyPackSize();
-        self._crc = 0
+        self._crc = crc64((unsigned char*)m_Body, GetBodyPackSize(), crc)
         
         binaryMessage = struct.pack(self._endian+"H",self._version)
         for k in range(12):
@@ -214,42 +213,117 @@ class MessageBase(object):
 
 #http://openigtlink.org/protocols/v2_header.html
 class ImageMessage(MessageBase):   
-    def __init__(self,data):
+    def __init__(self,data,spacing=1):
         MessageBase.__init__(self)
+        self._validMessage = True        
         self._name = "IMAGE"
-        self._data = data
-        self._validMessage = True
+        try:
+            self._data = np.asarray(data)
+        except Exception as inst:
+            _Print('ERROR, INVALID DATA. \n'+inst.args )
+            self._validMessage = False
+            return
+            
+        if self._data.dtype == np.int8:
+             self._datatype_s=2
+             self._format_data = "b"
+        elif self._data.dtype == np.uint8:
+            self._datatype_s=3
+            self._format_data = "B"
+        elif self._data.dtype == np.int16:
+            self._datatype_s=4
+            self._format_data = "h"
+        elif self._data.dtype == np.uint16:
+            self._datatype_s=5
+            self._format_data = "H"
+        elif self._data.dtype == np.int32:
+            self._datatype_s=6
+            self._format_data = "i"
+        elif self._data.dtype == np.uint32:
+            self._datatype_s=7
+            self._format_data = "I"
+        elif self._data.dtype == np.float32:
+            self._datatype_s=10
+            self._format_data = "f"
+        elif self._data.dtype == np.float64:
+            self._datatype_s=11
+            self._format_data = "d"
+        else:
+            self._data  = np.array(self._data , dtype=np.int8)            
+            self._datatype_s=2
+            self._format_data = "b"
+            
+        self._spacing = spacing
+        self._matrix = np.identity(4) #A matrix representing the origin and the orientation of the image.
+        self._bodyPackSize = None
 
     def PackBody(self):
         binaryMessage = struct.pack(self._endian+"H",IGTL_IMAGE_HEADER_VERSION)
-        binaryMessage = binaryMessage + struct.pack(self._endian+"I",1) # Number of Image Components (1:Scalar, >1:Vector). (NOTE: Vector data is stored fully interleaved.)
-        if self._data.dtype == np.int8:
-             s=2
-        elif self._data.dtype == np.uint8:
-            s=3
-        elif self._data.dtype == np.int16:
-            s=4
-        elif self._data.dtype == np.uint16:
-            s=5
-        elif self._data.dtype == np.int32:
-            s=6
-        elif self._data.dtype == np.uint32:
-            s=7
-        elif self._data.dtype == np.float32:
-            s=10
-        elif self._data.dtype == np.float64:
-            s=11
-        else:
-            return
-        binaryMessage = binaryMessage + struct.pack(self._endian+"I",s) 
+        binaryMessage = binaryMessage + struct.pack(self._endian+"B",1) # Number of Image Components (1:Scalar, >1:Vector). (NOTE: Vector data is stored fully interleaved.)
+
+
+        binaryMessage = binaryMessage + struct.pack(self._endian+"B",self._datatype_s) 
+
         if self._data.byteorder == "<":        
-            binaryMessage = binaryMessage + struct.pack(self._endian+"I",1)  # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
+            binaryMessage = binaryMessage + struct.pack(self._endian+"B",1)  # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
         else:
-            binaryMessage = binaryMessage + struct.pack(self._endian+"I",2)  # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
+            binaryMessage = binaryMessage + struct.pack(self._endian+"B",2)  # Endian for image data (1:BIG 2:LITTLE) (NOTE: values in image header is fixed to BIG endian)
             
-        binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape)  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape[0])  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape[1])  
+        if len(self._data.shape)>2:
+            binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape[2])  
+        else:
+            binaryMessage = binaryMessage + struct.pack(self._endian+"H",1)  
+            
+            
+        origin=np.zeros(3)
+        norm_i=np.zeros(3)
+        norm_j=np.zeros(3)
+        norm_k=np.zeros(3)
+        for i in range(3): 
+            norm_i[i] = self._matrix[i][0];
+            norm_j[i] = self._matrix[i][1];
+            norm_k[i] = self._matrix[i][2];
+            origin[i] = self._matrix[i][3];            
+                
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",norm_i[0] * self._spacing[0])  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",norm_i[1] * self._spacing[0])  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",norm_i[2] * self._spacing[0])  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",norm_j[0] * self._spacing[1])  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",norm_j[1] * self._spacing[1])  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",norm_j[2] * self._spacing[1])  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",norm_k[0] * self._spacing[2])  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",norm_k[1] * self._spacing[2])  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",norm_k[2] * self._spacing[2])
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",origin[0] )  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",origin[1] )  
+        binaryMessage = binaryMessage + struct.pack(self._endian+"f",origin[2] )  
+
+        binaryMessage = binaryMessage + struct.pack(self._endian+"H",0 )      # Starting index of subvolume
+        binaryMessage = binaryMessage + struct.pack(self._endian+"H",0 )      # Starting index of subvolume
+        binaryMessage = binaryMessage + struct.pack(self._endian+"H",0 )      # Starting index of subvolume
+
+        binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape[0])   #  number of pixels of subvolume
+        binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape[1])  
+        if len(self._data.shape)>2:
+            binaryMessage = binaryMessage + struct.pack(self._endian+"H",self._data.shape[2])  
+        else:
+            binaryMessage = binaryMessage + struct.pack(self._endian+"H",1) 
+
+
+        fmt=self._data.byteorder+self._format_data*len(self._data)
+        binaryMessage = binaryMessage + struct.pack(fmt,*self._data)
+
+        IGTL_IMAGE_HEADER_SIZE =72
+
+        self._bodyPackSize = struct.calcsize(fmt)+IGTL_IMAGE_HEADER_SIZE
+
+        print self._bodyPackSize
+        print len(binaryMessage)
+
 
         return binaryMessage
 
     def GetBodyPackSize(self):
-        pass
+        return self._bodyPackSize 
