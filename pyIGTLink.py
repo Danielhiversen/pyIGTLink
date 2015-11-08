@@ -5,6 +5,7 @@ Created on Tue Nov  3 19:17:05 2015
 @author: Daniel Hoyer Iversen
 """
 
+import crcmod
 import numpy as np
 import signal
 import collections
@@ -158,8 +159,8 @@ def _Print(text):
     print "********PyIGTLink********\n" + text +"\n****************************"
      
 
-
-
+# http://slicer-devel.65872.n3.nabble.com/OpenIGTLinkIF-and-CRC-td4031360.html    
+crc64 = crcmod.mkCrcFun(0x142F0E1EBA9EA3693, rev=False, initCrc=0x0000000000000000, xorOut=0x0000000000000000)    
 
 class MessageBase(object):
     """message"""
@@ -170,35 +171,23 @@ class MessageBase(object):
         self._name = ""                      # The type name field is an ASCII character string specifying the type of the data contained in the message body e.g. “TRANSFORM”. The length of the type name must be within 12 characters.
         self._device_name = ""               # The device name field contains an ASCII character string specifying the name of the the message.
         self._timestamp = 0	                # The timestamp field contains a 64-bit timestamp indicating when the data is generated. Please refer http://openigtlink.org/protocols/v2_timestamp.html for the format of the 64-bit timestamp.
-        self._body_size = None               # Size of body in bytes
-        self._crc = None                     # CRC The 64-bit CRC used in OpenIGTLink protocol is based on ECMA-182 standard. An example code is available in igtl_util.c in the OpenIGTLink library.
 
         self._endian = ">"                   # big-endian
 
     def Pack(self):
         binaryBody = self.PackBody()
-        self._body_size = self.GetBodyPackSize();
-        self._crc = crc64((unsigned char*)m_Body, GetBodyPackSize(), crc)
+        body_size = self.GetBodyPackSize();
+        crc = crc64(binaryBody)
         
         binaryMessage = struct.pack(self._endian+"H",self._version)
-        for k in range(12):
-            if k < len(self._name):
-                c = self._name[k]
-            else:
-                c = " "
-            binaryMessage = binaryMessage + struct.pack(self._endian+"s",c)
-        for k in range(20):
-            if k < len(self._device_name):
-                c = self._device_name[k]
-            else:
-                c = " "
-            binaryMessage = binaryMessage + struct.pack(self._endian+"s",c)
+        binaryMessage = binaryMessage + struct.pack(self._endian+"12s",str(self._name))
+        binaryMessage = binaryMessage + struct.pack(self._endian+"20s",str(self._device_name))
         binaryMessage = binaryMessage + struct.pack(self._endian+"Q",self._timestamp)
-        binaryMessage = binaryMessage + struct.pack(self._endian+"Q",self._body_size)
-        binaryMessage = binaryMessage + struct.pack(self._endian+"Q",self._crc)
+        binaryMessage = binaryMessage + struct.pack(self._endian+"Q",body_size)
+        binaryMessage = binaryMessage + struct.pack(self._endian+"Q",crc)
         binaryMessage = binaryMessage + binaryBody
 
-        return binaryMessage
+        return binaryMessage+binaryBody
 
     def PackBody(self):
         raise RuntimeError('Should be implemented in child class')
@@ -327,3 +316,56 @@ class ImageMessage(MessageBase):
 
     def GetBodyPackSize(self):
         return self._bodyPackSize 
+        
+        
+        
+
+
+
+
+if __name__ == "__main__":
+        """
+        Usage:
+        pyIGTLink.py
+        Run as local server sending random tissue data
+        
+        """
+
+        if len(sys.argv)==1:
+
+                print "\n\n   Run as server, sending random data\n\n  "
+                server=PyIGTLink(localServer=True)
+
+                samples=500
+                beams=100
+                k=0
+
+                while True:
+                        k=k+1
+                        print k
+                        data=np.random.randn(samples,beams)*50+100
+
+                        message=ImageMessage(data)
+                        server.AddMessageToSendQueue(message)
+                        time.sleep(1.5)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
