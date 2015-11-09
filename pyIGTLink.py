@@ -181,20 +181,21 @@ class MessageBase(object):
         crc = crc64(binaryBody)
         
         binaryMessage = struct.pack(self._endian+"H",self._version)
-        binaryMessage = binaryMessage + struct.pack(self._endian+"12s",str(self._name))
-        binaryMessage = binaryMessage + struct.pack(self._endian+"20s",str(self._device_name))
+        binaryMessage = binaryMessage + struct.pack(self._endian+"12s",self._name)
+        binaryMessage = binaryMessage + struct.pack(self._endian+"20s",self._device_name)
         binaryMessage = binaryMessage + struct.pack(self._endian+"II",self._timestamp,0)
         binaryMessage = binaryMessage + struct.pack(self._endian+"Q",body_size)
         binaryMessage = binaryMessage + struct.pack(self._endian+"Q",crc)
+
         binaryMessage = binaryMessage + binaryBody
 
-        return binaryMessage+binaryBody
+        return binaryMessage
 
     def PackBody(self):
-        raise RuntimeError('Should be implemented in child class')
+        return b""
 
     def GetBodyPackSize(self):
-        raise RuntimeError('Should be implemented in child class')
+        return 0
 
     def IsValid(self):
         return self._validMessage
@@ -203,14 +204,14 @@ class MessageBase(object):
 
 # http://openigtlink.org/protocols/v2_image.html
 class ImageMessage(MessageBase):   
-    def __init__(self,data,spacing=[1, 1, 1]):
+    def __init__(self,image,spacing=[1, 1, 1]):
         MessageBase.__init__(self)
         self._validMessage = True        
         self._name = "IMAGE"
         try:
-            self._data = np.asarray(data)
-        except Exception as inst:
-            _Print('ERROR, INVALID DATA. \n'+inst.args )
+            self._data = np.asarray(image)
+        except Exception as e:
+            _Print('ERROR, INVALID IMAGE. \n'+ str(e))
             self._validMessage = False
             return
             
@@ -307,10 +308,9 @@ class ImageMessage(MessageBase):
 
         data=self._data
         data.resize(data.size,1)
-        fmt=fmt+self._format_data*len(data)
-        print "--------------"
-        print len(binaryMessage)
-        binaryMessage = binaryMessage + struct.pack(fmt,*data)
+        fmt=">"+self._format_data*len(data)
+
+        binaryMessage = binaryMessage + self._data.tostring('F') #struct.pack(fmt,*data)
 
         self._bodyPackSize = len(binaryMessage)
         return binaryMessage
@@ -331,6 +331,23 @@ if __name__ == "__main__":
         Run as local server sending random tissue data
         
         """
+        if False:
+            
+            IGTL_HEADER_SIZE = 58
+            msg = MessageBase()
+            print len(msg.Pack())==IGTL_HEADER_SIZE
+            
+            
+            data=np.random.randn(500,100)*50+100
+            msg=ImageMessage(data)
+            print len(msg.PackBody()) == msg.GetBodyPackSize()
+            print len(msg.Pack())==msg.GetBodyPackSize()+IGTL_HEADER_SIZE
+            
+            exit()
+            
+            
+            
+            
 
         if len(sys.argv)==1:
 
@@ -340,16 +357,21 @@ if __name__ == "__main__":
                 samples=500
                 beams=100
                 k=0
+                
+                data=np.random.randn(samples,beams)*50+100
+
+                print data.dtype.byteorder
+                
 
                 while True:
-                        k=k+1
-                        print k
-                        data=np.random.randn(samples,beams)*50+100
-
-                        message=ImageMessage(data)
-                        server.AddMessageToSendQueue(message)
+                        if server.isConnected:
+                            k=k+1
+                            print k
+                            data=np.random.randn(samples,beams)*50+100
+                            message=ImageMessage(data)
+                            server.AddMessageToSendQueue(message)
                         time.sleep(1.5)
-
+                        
 
 
 
