@@ -134,7 +134,7 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
             if len(self.server._message_queue) > 0:
                 with self.server._lock_message_queue:
                     message = self.server._message_queue.popleft()
-                    response_data = message.Pack()
+                    response_data = message.getBinaryMessage()
                     # print "Send: " + str(message._timestamp)
                     try:
                         self.request.sendall(response_data)
@@ -176,9 +176,14 @@ class MessageBase(object):
         self._timestamp = int(time.time())
 
         self._endian = ">"  # big-endian
+        
+        self._binary_body = None
+        self._binary_head = None
+        self._bodyPackSize = 0
+
 
     def Pack(self):
-        binaryBody = self.PackBody()
+        binaryBody = self.getBinaryBody()
         body_size = self.GetBodyPackSize()
         crc = crc64(binaryBody)
 
@@ -189,18 +194,28 @@ class MessageBase(object):
         binaryMessage = binaryMessage + struct.pack(self._endian+"Q", body_size)
         binaryMessage = binaryMessage + struct.pack(self._endian+"Q", crc)
 
-        binaryMessage = binaryMessage + binaryBody
+        self._binary_head = binaryMessage 
 
-        return binaryMessage
+    def getBinaryMessage(self):
+        if not self._binary_head:
+            self.Pack()
+        return self._binary_head + self.getBinaryBody()
+
+    def getBinaryBody(self):
+        if not self._binary_body:
+            self.PackBody()
+        return self._binary_body            
 
     def PackBody(self):
-        return b""
-
-    def GetBodyPackSize(self):
-        return 0
+        self._binary_body = b""
 
     def IsValid(self):
         return self._validMessage
+                
+
+
+    def GetBodyPackSize(self):
+        return self._bodyPackSize
 
 
 # http://openigtlink.org/protocols/v2_image.html
@@ -216,41 +231,44 @@ class ImageMessage(MessageBase):
             self._validMessage = False
             return
 
-        if self._data.dtype == np.int8:
-            self._datatype_s = 2
-            self._format_data = "b"
-        elif self._data.dtype == np.uint8:
-            self._datatype_s = 3
-            self._format_data = "B"
-        elif self._data.dtype == np.int16:
-            self._datatype_s = 4
-            self._format_data = "h"
-        elif self._data.dtype == np.uint16:
-            self._datatype_s = 5
-            self._format_data = "H"
-        elif self._data.dtype == np.int32:
-            self._datatype_s = 6
-            self._format_data = "i"
-        elif self._data.dtype == np.uint32:
-            self._datatype_s = 7
-            self._format_data = "I"
-        elif self._data.dtype == np.float32:
-            self._datatype_s = 10
-            self._format_data = "f"
-        elif self._data.dtype == np.float64:
-            self._datatype_s = 11
-            self._format_data = "f"
-        else:
-            pass
+# Only int8 is suppoerted now
+#        if self._data.dtype == np.int8:
+#            self._datatype_s = 2
+#            self._format_data = "b"
+#        elif self._data.dtype == np.uint8:
+#            self._datatype_s = 3
+#            self._format_data = "B"
+#        elif self._data.dtype == np.int16:
+#            self._datatype_s = 4
+#            self._format_data = "h"
+#        elif self._data.dtype == np.uint16:
+#            self._datatype_s = 5
+#            self._format_data = "H"
+#        elif self._data.dtype == np.int32:
+#            self._datatype_s = 6
+#            self._format_data = "i"
+#        elif self._data.dtype == np.uint32:
+#            self._datatype_s = 7
+#            self._format_data = "I"
+#        elif self._data.dtype == np.float32:
+#            self._datatype_s = 10
+#            self._format_data = "f"
+#        elif self._data.dtype == np.float64:
+#            self._datatype_s = 11
+#            self._format_data = "f"
+#        else:
+#            pass
         self._data = np.array(self._data, dtype=np.int8)
         self._datatype_s = 2
         self._format_data = "b"
 
         self._spacing = spacing
         self._matrix = np.identity(4)  # A matrix representing the origin and the orientation of the image.
+        
 
     def PackBody(self):
         binaryMessage = struct.pack(self._endian+"H", IGTL_IMAGE_HEADER_VERSION)
+        
         binaryMessage = binaryMessage + struct.pack(self._endian+"B", 1)  # Number of Image Components (1:Scalar, >1:Vector). (NOTE: Vector data is stored fully interleaved.)
         binaryMessage = binaryMessage + struct.pack(self._endian+"B", self._datatype_s)
 
@@ -308,10 +326,10 @@ class ImageMessage(MessageBase):
         binaryMessage = binaryMessage + self._data.tostring(byteorder)  # struct.pack(fmt,*data)
         self._bodyPackSize = len(binaryMessage)
 
-        return binaryMessage
+        self._binary_body = binaryMessage
 
-    def GetBodyPackSize(self):
-        return self._bodyPackSize
+
+
 
 if __name__ == "__main__":
     """
@@ -323,12 +341,12 @@ if __name__ == "__main__":
     if False:
         IGTL_HEADER_SIZE = 58
         msg = MessageBase()
-        print len(msg.Pack()) == IGTL_HEADER_SIZE
+        print len(msg.getBinaryMessage()) == IGTL_HEADER_SIZE
 
         data = np.random.randn(500, 100)*50+100
         msg = ImageMessage(data)
-        print len(msg.PackBody()) == msg.GetBodyPackSize()
-        print len(msg.Pack()) == msg.GetBodyPackSize()+IGTL_HEADER_SIZE
+        print len(msg.getBinaryBody()) == msg.GetBodyPackSize()
+        print len(msg.getBinaryMessage()) == msg.GetBodyPackSize()+IGTL_HEADER_SIZE
 
         exit()
 
@@ -350,13 +368,25 @@ if __name__ == "__main__":
             time.sleep(1.5)
 
     elif len(sys.argv) == 2:
-        print "\n\n   Run as server, sending data from file\n\n  "
+        print "\n\n   Run as server, sending moving circle \n\n  "
         server = PyIGTLink(localServer=True)
+
+        n = 500
+        r = 90
+
+        k = 0
         while True:
-            if server.isConnected:
+            if server.isConnected():
                 k = k+1
                 print k
-                # data=np.random.randn(samples,beams)*50+100
-                # message=ImageMessage(data)
-                # server.AddMessageToSendQueue(message)
-            time.sleep(1.5)
+                a = np.mod(10*k, n)
+                b = np.mod((400*k)/n+30, n)
+                y, x = np.ogrid[-a:n-a, -b:n-b]
+                mask = x*x + y*y <= r*r
+
+                data = np.ones((n, n))
+                data[mask] = 255
+
+                message = ImageMessage(data)
+                server.AddMessageToSendQueue(message)
+            time.sleep(0.1)
