@@ -9,4 +9,4 @@ while true
     pause(0.1);
 end
 
-server.CloseConnection(); % close server
+server.CloseServer(); % close server

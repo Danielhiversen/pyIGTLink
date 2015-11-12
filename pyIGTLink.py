@@ -94,7 +94,7 @@ class PyIGTLink(SocketServer.TCPServer):
 
     def _SignalHandler(self, signum, stackframe):
         if signum == signal.SIGTERM or signum == signal.SIGINT:
-            self.CloseConnection()
+            self.CloseServer()
             _Print('YOU KILLED ME, BUT I CLOSED THE SERVER BEFORE I DIED')
             sys.exit(signum)
 
@@ -104,7 +104,7 @@ class PyIGTLink(SocketServer.TCPServer):
     def updateConnectedStatus(self, val):
         self._connected = val
 
-    def CloseConnection(self):
+    def CloseServer(self):
         """Will close connection and shutdown server"""
         self._connected = False
         with self.lock_server_thread:
@@ -183,7 +183,6 @@ class MessageBase(object):
         self._binary_body = None
         self._binary_head = None
         self._bodyPackSize = 0
-
 
     def Pack(self):
         binaryBody = self.getBinaryBody()
@@ -273,7 +272,6 @@ class ImageMessage(MessageBase):
         self._spacing = spacing
         self._matrix = np.identity(4)  # A matrix representing the origin and the orientation of the image.
 
-
     def PackBody(self):
         binaryMessage = struct.pack(self._endian+"H", IGTL_IMAGE_HEADER_VERSION)
         # Number of Image Components (1:Scalar, >1:Vector). (NOTE: Vector data is stored fully interleaved.)
@@ -331,7 +329,6 @@ class ImageMessage(MessageBase):
         else:
             binaryMessage = binaryMessage + struct.pack(self._endian+"H", 1)
 
-
         binaryMessage = binaryMessage + self._data.tostring(byteorder)  # struct.pack(fmt,*data)
         self._bodyPackSize = len(binaryMessage)
 
@@ -347,7 +344,7 @@ class ImageMessageMatlab(ImageMessage):
             self._validMessage = False
             return
         data = data.reshape(dim)
-        ImageMessage.__init__(self,data, spacing)
+        ImageMessage.__init__(self, data, spacing)
 
 
 if __name__ == "__main__":
@@ -357,18 +354,6 @@ if __name__ == "__main__":
     Run as local server sending random tissue data
 
     """
-
-    if False:
-        IGTL_HEADER_SIZE = 58
-        msg = MessageBase()
-        print len(msg.getBinaryMessage()) == IGTL_HEADER_SIZE
-
-        data = np.random.randn(500, 100)*50+100
-        msg = ImageMessage(data)
-        print len(msg.getBinaryBody()) == msg.GetBodyPackSize()
-        print len(msg.getBinaryMessage()) == msg.GetBodyPackSize()+IGTL_HEADER_SIZE
-
-        exit()
 
     if len(sys.argv) == 1:
         print "\n\n   Run as server, sending random data\n\n  "
