@@ -86,12 +86,11 @@ class PyIGTLink(SocketServer.TCPServer):
                 self.message_queue.append(message)  # copy.deepcopy(message))
             while wait and len(self.message_queue) > 0:
                 time.sleep(0.001)
-                return True
         else:
             if len(self.message_queue) > 0:
                 with self.lock_server_thread:
                     self.message_queue = collections.clear()
-            return False
+        return True
 
     def _SignalHandler(self, signum, stackframe):
         if signum == signal.SIGTERM or signum == signal.SIGINT:
@@ -226,18 +225,18 @@ class ImageMessage(MessageBase):
         self._validMessage = True
         self._name = "IMAGE"
 
-        if len(image.shape) < 2:
-            self._validMessage = False
-            _Print('ERROR, INVALID IMAGE SIZE. \n')
-
-            return
-
         try:
             self._data = np.asarray(image)
         except Exception as e:
             _Print('ERROR, INVALID IMAGE. \n' + str(e))
             self._validMessage = False
             return
+
+        if len(self._data.shape) < 2:
+            self._validMessage = False
+            _Print('ERROR, INVALID IMAGE SIZE. \n')
+            return
+
 
 # Only int8 is suppoerted now
 #        if self._data.dtype == np.int8:

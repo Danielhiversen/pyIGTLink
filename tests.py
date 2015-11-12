@@ -39,7 +39,9 @@ class TestServer(unittest.TestCase):
             k = k+1
             data = np.random.randn(samples, beams)*50+100
             imageMessage = pyIGTLink.ImageMessage(data)
-            self.server.AddMessageToSendQueue(imageMessage)
+            self.assertTrue(self.server.AddMessageToSendQueue(imageMessage))
+        self.assertFalse(self.server.AddMessageToSendQueue("invalidPackage"))
+        self.assertFalse(self.server.AddMessageToSendQueue([]))
 
 
 class TestMsg(unittest.TestCase):
@@ -54,6 +56,12 @@ class TestMsg(unittest.TestCase):
     def test_image_msg(self):
         data = np.random.randn(500, 100)*50+100
         msg = pyIGTLink.ImageMessage(data)
+        self.assertEqual(len(msg.getBinaryBody()), msg.GetBodyPackSize())
+        self.assertEqual(len(msg.getBinaryMessage()), msg.GetBodyPackSize() + IGTL_HEADER_SIZE)
+
+    def test_image_msg_matlab(self):
+        data = np.random.randn(500*100, 1)*50+100
+        msg = pyIGTLink.ImageMessageMatlab(data, [500, 100])
         self.assertEqual(len(msg.getBinaryBody()), msg.GetBodyPackSize())
         self.assertEqual(len(msg.getBinaryMessage()), msg.GetBodyPackSize() + IGTL_HEADER_SIZE)
 
