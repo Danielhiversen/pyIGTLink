@@ -154,7 +154,7 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
 
 # Help functions and help classes:
 def _Print(text):
-    print "********PyIGTLink********\n" + text + "\n****************************"
+    print "**********PyIGTLink*********\n" + text + "\n****************************"
 
 
 # http://slicer-devel.65872.n3.nabble.com/OpenIGTLinkIF-and-CRC-td4031360.html
@@ -228,6 +228,8 @@ class ImageMessage(MessageBase):
 
         if len(image.shape) < 2:
             self._validMessage = False
+            _Print('ERROR, INVALID IMAGE SIZE. \n')
+
             return
 
         try:
@@ -336,6 +338,16 @@ class ImageMessage(MessageBase):
         self._binary_body = binaryMessage
 
 
+class ImageMessageMatlab(ImageMessage):
+    def __init__(self, image, dim, spacing=[1, 1, 1]):
+        try:
+            data = np.asarray(image)
+        except Exception as e:
+            _Print('ERROR, INVALID IMAGE. \n' + str(e))
+            self._validMessage = False
+            return
+        data = data.reshape(dim)
+        ImageMessage.__init__(self,data, spacing)
 
 
 if __name__ == "__main__":
