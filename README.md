@@ -5,3 +5,11 @@ ALso support sending data from matlab over IGTLink
 
 
 Only ImageMessages are implementated at the moment
+
+
+
+## Example
+
+
+python pyIGTLink.py    - Will send 2D image with random noise as local server
+python pyIGTLink.py  1 - Will send 2D image with moving circle as local server
