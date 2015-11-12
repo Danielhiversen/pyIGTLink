@@ -5,8 +5,7 @@ Created on Tue Nov  3 19:17:05 2015
 @author: Daniel Hoyer Iversen
 """
 
-from __future__  import print_function
-
+from __future__ import print_function
 import crcmod
 import numpy as np
 import signal
@@ -16,12 +15,11 @@ import sys
 import struct
 import threading
 import time
-
 if sys.version_info >= (3, 0):
     import socketserver as SocketServer
 else:
     import SocketServer
-    
+
 IGTL_HEADER_VERSION = 1
 IGTL_IMAGE_HEADER_VERSION = 1
 
