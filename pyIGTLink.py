@@ -5,20 +5,23 @@ Created on Tue Nov  3 19:17:05 2015
 @author: Daniel Hoyer Iversen
 """
 
-# pylint: disable=invalid-name
+from __future__  import print_function
 
 import crcmod
 import numpy as np
 import signal
 import collections
 import socket
-import SocketServer
 import sys
 import struct
 import threading
 import time
 
-
+if sys.version_info >= (3, 0):
+    import socketserver as SocketServer
+else:
+    import SocketServer
+    
 IGTL_HEADER_VERSION = 1
 IGTL_IMAGE_HEADER_VERSION = 1
 
@@ -154,7 +157,7 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
 
 # Help functions and help classes:
 def _Print(text):
-    print "**********PyIGTLink*********\n" + text + "\n****************************"
+    print("**********PyIGTLink*********\n" + text + "\n****************************")
 
 
 # http://slicer-devel.65872.n3.nabble.com/OpenIGTLinkIF-and-CRC-td4031360.html
@@ -356,7 +359,7 @@ if __name__ == "__main__":
     """
 
     if len(sys.argv) == 1:
-        print "\n\n   Run as server, sending random data\n\n  "
+        print("\n\n   Run as server, sending random data\n\n  ")
         server = PyIGTLink(localServer=True)
 
         samples = 500
@@ -366,7 +369,7 @@ if __name__ == "__main__":
         while True:
             if server.isConnected():
                 k = k+1
-                print k
+                print(k)
                 data = np.random.randn(samples, beams)*50+100
                 # data[:, :, 1] = data[:, :, 1] + 90
                 imageMessage = ImageMessage(data)
@@ -374,7 +377,7 @@ if __name__ == "__main__":
             time.sleep(0.1)
 
     elif len(sys.argv) == 2:
-        print "\n\n   Run as server, sending moving circle \n\n  "
+        print("\n\n   Run as server, sending moving circle \n\n  ")
         server = PyIGTLink(localServer=True)
 
         n = 500
@@ -384,7 +387,7 @@ if __name__ == "__main__":
         while True:
             if server.isConnected():
                 k = k+1
-                print k
+                print(k)
                 a = np.mod(10*k, n)
                 b = np.mod((400*k)/n+30, n)
                 y, x = np.ogrid[-a:n-a, -b:n-b]
@@ -393,7 +396,7 @@ if __name__ == "__main__":
                 data = np.ones((n, n))
                 data[mask] = 255
 
-                print data.shape
+                print(data.shape)
 
                 imageMessage = ImageMessage(data)
                 server.AddMessageToSendQueue(imageMessage)
