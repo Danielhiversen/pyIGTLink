@@ -8,3 +8,5 @@ install:
 script:
   - flake8
   - "python tests.py"
+after_success:
+  - coveralls
