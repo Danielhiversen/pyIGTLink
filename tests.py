@@ -41,7 +41,7 @@ class TestServer(unittest.TestCase):
             imageMessage = pyIGTLink.ImageMessage(data)
             self.assertTrue(self.server.AddMessageToSendQueue(imageMessage))
         self.assertFalse(self.server.AddMessageToSendQueue("invalidPackage"))
-        self.assertFalse(self.server.AddMessageToSendQueue([]))
+        self.assertFalse(self.server.AddMessageToSendQueue(pyIGTLink.ImageMessage([1,2,3])))
 
 
 class TestMsg(unittest.TestCase):
