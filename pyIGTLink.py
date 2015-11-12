@@ -94,8 +94,6 @@ class PyIGTLink(SocketServer.TCPServer):
 
     def _SignalHandler(self, signum, stackframe):
         if signum == signal.SIGTERM or signum == signal.SIGINT:
-            with self.lock_server_thread:
-                self.shuttingdown = True
             self.CloseConnection()
             _Print('YOU KILLED ME, BUT I CLOSED THE SERVER BEFORE I DIED')
             sys.exit(signum)
@@ -112,6 +110,7 @@ class PyIGTLink(SocketServer.TCPServer):
         with self.lock_server_thread:
             self.shuttingdown = True
         self.shutdown()
+        self.server_close()
         _Print("\nServer closed\n")
 
     def _PrintIpAdressAndPortNo(self):
