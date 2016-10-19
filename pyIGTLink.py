@@ -134,7 +134,7 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         self.server.update_connected_status(True)
         while True:
-            #print(len(self.server.message_queue))
+            # print(len(self.server.message_queue))
             if len(self.server.message_queue) > 0:
                 with self.server.lock_server_thread:
                     message = self.server.message_queue.popleft()
@@ -225,7 +225,8 @@ class ImageMessage(MessageBase):
         MessageBase.__init__(self)
         self._valid_message = True
         self._name = "IMAGE"
-        self._timestamp = timestamp
+        if timestamp:
+            self._timestamp = timestamp
 
         try:
             self._data = np.asarray(image)
