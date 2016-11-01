@@ -19,7 +19,6 @@ if sys.version_info >= (3, 0):
     import socketserver as SocketServer
 else:
     import SocketServer
-from fractions import Fraction
 
 IGTL_HEADER_VERSION = 1
 IGTL_IMAGE_HEADER_VERSION = 1
