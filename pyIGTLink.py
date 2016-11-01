@@ -370,9 +370,9 @@ CRC64 = crcmod.mkCrcFun(0x142F0E1EBA9EA3693, rev=False, initCrc=0x00000000000000
 
 # https://github.com/openigtlink/OpenIGTLink/blob/cf9619e2fece63be0d30d039f57b1eb4d43b1a75/Source/igtlutil/igtl_util.c#L168
 def _igtl_nanosec_to_frac(nanosec):
-    base = 1000000000 # 10^9
+    base = 1000000000  # 10^9
     mask = 0x80000000
-    r    = 0x00000000
+    r = 0x00000000
     while mask:
         base += 1
         base >>= 1
