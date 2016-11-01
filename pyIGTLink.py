@@ -25,7 +25,7 @@ IGTL_IMAGE_HEADER_VERSION = 1
 
 
 class PyIGTLink(SocketServer.TCPServer):
-    """ For streaming data over TCP with GE-protocol"""
+    """ For streaming data over TCP with IGTLink"""
     def __init__(self, port=18944, localServer=False):
         """
         port - port number
