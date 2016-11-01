@@ -134,6 +134,7 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         self.server.update_connected_status(True)
         while True:
+            # print(len(self.server.message_queue))
             if len(self.server.message_queue) > 0:
                 with self.server.lock_server_thread:
                     message = self.server.message_queue.popleft()
@@ -169,14 +170,14 @@ class MessageBase(object):
         # Version number The version number field specifies the header format version. Currently the version number is 1.
         # Please note that this is different from the protocol version.
         self._version = IGTL_HEADER_VERSION
-        # The type name field is an ASCII character string specifying the type of the data contained in the message body e.g. “TRANSFORM”.
+        # The type name field is an ASCII character string specifying the type of the data contained in the message body e.g. “TRANSFORM�?.
         # The length of the type name must be within 12 characters.
         self._name = ""
         # The device name field contains an ASCII character string specifying the name of the the message.
         self._device_name = ""
         # The timestamp field contains a 64-bit timestamp indicating when the data is generated.
         # Please refer http://openigtlink.org/protocols/v2_timestamp.html for the format of the 64-bit timestamp.
-        self._timestamp = int(time.time())
+        self._timestamp = time.time()
 
         self._endian = ">"  # big-endian
 
@@ -188,11 +189,14 @@ class MessageBase(object):
         binary_body = self.get_binary_body()
         body_size = self.get_body_pack_size()
         crc = CRC64(binary_body)
+        _timestamp1 = int(self._timestamp)
+        _timestamp2 = int((self._timestamp - _timestamp1)*10**9)
+        #print(self._timestamp, self._timestamp - _timestamp1, _timestamp2)
 
         binary_message = struct.pack(self._endian+"H", self._version)
         binary_message = binary_message + struct.pack(self._endian+"12s", self._name)
         binary_message = binary_message + struct.pack(self._endian+"20s", self._device_name)
-        binary_message = binary_message + struct.pack(self._endian+"II", self._timestamp, 0)
+        binary_message = binary_message + struct.pack(self._endian+"II", _timestamp1, _timestamp2)
         binary_message = binary_message + struct.pack(self._endian+"Q", body_size)
         binary_message = binary_message + struct.pack(self._endian+"Q", crc)
 
@@ -220,10 +224,12 @@ class MessageBase(object):
 
 # http://openigtlink.org/protocols/v2_image.html
 class ImageMessage(MessageBase):
-    def __init__(self, image, spacing=[1, 1, 1]):
+    def __init__(self, image, spacing=[1, 1, 1], timestamp=None):
         MessageBase.__init__(self)
         self._valid_message = True
         self._name = "IMAGE"
+        if timestamp:
+            self._timestamp = timestamp
 
         try:
             self._data = np.asarray(image)
@@ -265,9 +271,9 @@ class ImageMessage(MessageBase):
 #            self._format_data = "f"
 #        else:
 #            pass
-        self._data = np.array(self._data, dtype=np.int8)
-        self._datatype_s = 2
-        self._format_data = "b"
+        self._data = np.array(self._data, dtype=np.uint8)
+        self._datatype_s = 3
+        self._format_data = "B"
 
         self._spacing = spacing
         self._matrix = np.identity(4)  # A matrix representing the origin and the orientation of the image.
@@ -336,7 +342,7 @@ class ImageMessage(MessageBase):
 
 
 class ImageMessageMatlab(ImageMessage):
-    def __init__(self, image, dim, spacing=[1, 1, 1]):
+    def __init__(self, image, dim, spacing=[1, 1, 1], timestamp=None):
         try:
             data = np.asarray(image)
         except Exception as e:
@@ -344,7 +350,7 @@ class ImageMessageMatlab(ImageMessage):
             self._valid_message = False
             return
         data = data.reshape(dim)
-        ImageMessage.__init__(self, data, spacing)
+        ImageMessage.__init__(self, data, spacing, timestamp)
 
 
 if __name__ == "__main__":
