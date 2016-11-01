@@ -19,6 +19,7 @@ if sys.version_info >= (3, 0):
     import socketserver as SocketServer
 else:
     import SocketServer
+from fractions import Fraction
 
 IGTL_HEADER_VERSION = 1
 IGTL_IMAGE_HEADER_VERSION = 1
@@ -158,10 +159,6 @@ def _print(text):
     print("**********PyIGTLink*********\n" + text + "\n****************************")
 
 
-# http://slicer-devel.65872.n3.nabble.com/OpenIGTLinkIF-and-CRC-td4031360.html
-CRC64 = crcmod.mkCrcFun(0x142F0E1EBA9EA3693, rev=False, initCrc=0x0000000000000000, xorOut=0x0000000000000000)
-
-
 # http://openigtlink.org/protocols/v2_header.html
 class MessageBase(object):
     """message"""
@@ -170,7 +167,7 @@ class MessageBase(object):
         # Version number The version number field specifies the header format version. Currently the version number is 1.
         # Please note that this is different from the protocol version.
         self._version = IGTL_HEADER_VERSION
-        # The type name field is an ASCII character string specifying the type of the data contained in the message body e.g. â€œTRANSFORMâ€?.
+        # The type name field is an ASCII character string specifying the type of the data contained in the message body e.g. TRANSFORM.
         # The length of the type name must be within 12 characters.
         self._name = ""
         # The device name field contains an ASCII character string specifying the name of the the message.
@@ -190,8 +187,9 @@ class MessageBase(object):
         body_size = self.get_body_pack_size()
         crc = CRC64(binary_body)
         _timestamp1 = int(self._timestamp)
-        _timestamp2 = int((self._timestamp - _timestamp1)*10**9)
-        #print(self._timestamp, self._timestamp - _timestamp1, _timestamp2)
+        _timestamp2 = _igtl_nanosec_to_frac(int((self._timestamp - _timestamp1)*10**9))
+
+        print(self._timestamp, self._timestamp - _timestamp1, _timestamp2)
 
         binary_message = struct.pack(self._endian+"H", self._version)
         binary_message = binary_message + struct.pack(self._endian+"12s", self._name)
@@ -353,6 +351,25 @@ class ImageMessageMatlab(ImageMessage):
         ImageMessage.__init__(self, data, spacing, timestamp)
 
 
+# http://slicer-devel.65872.n3.nabble.com/OpenIGTLinkIF-and-CRC-td4031360.html
+CRC64 = crcmod.mkCrcFun(0x142F0E1EBA9EA3693, rev=False, initCrc=0x0000000000000000, xorOut=0x0000000000000000)
+
+
+# https://github.com/openigtlink/OpenIGTLink/blob/cf9619e2fece63be0d30d039f57b1eb4d43b1a75/Source/igtlutil/igtl_util.c#L168
+def _igtl_nanosec_to_frac(nanosec):
+    base = 1000000000 # 10^9
+    mask = 0x80000000
+    r    = 0x00000000
+    while mask:
+        base += 1
+        base >>= 1
+        if (nanosec >= base):
+            r |= mask
+            nanosec = nanosec - base
+        mask >>= 1
+    return r
+
+
 if __name__ == "__main__":
     """
     Usage:
@@ -360,7 +377,6 @@ if __name__ == "__main__":
     Run as local server sending random tissue data
 
     """
-
     if len(sys.argv) == 1:
         print("\n\n   Run as server, sending random data\n\n  ")
         server = PyIGTLink(localServer=True)
