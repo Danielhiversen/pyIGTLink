@@ -177,7 +177,7 @@ class MessageBase(object):
         self._device_name = ""
         # The timestamp field contains a 64-bit timestamp indicating when the data is generated.
         # Please refer http://openigtlink.org/protocols/v2_timestamp.html for the format of the 64-bit timestamp.
-        self._timestamp = int(time.time())
+        self._timestamp = time.time()
 
         self._endian = ">"  # big-endian
 
@@ -189,11 +189,14 @@ class MessageBase(object):
         binary_body = self.get_binary_body()
         body_size = self.get_body_pack_size()
         crc = CRC64(binary_body)
+        _timestamp1 = int(self._timestamp)
+        _timestamp2 = int((self._timestamp - _timestamp1)*10**9)
+        #print(self._timestamp, self._timestamp - _timestamp1, _timestamp2)
 
         binary_message = struct.pack(self._endian+"H", self._version)
         binary_message = binary_message + struct.pack(self._endian+"12s", self._name)
         binary_message = binary_message + struct.pack(self._endian+"20s", self._device_name)
-        binary_message = binary_message + struct.pack(self._endian+"II", self._timestamp, 0)
+        binary_message = binary_message + struct.pack(self._endian+"II", _timestamp1, _timestamp2)
         binary_message = binary_message + struct.pack(self._endian+"Q", body_size)
         binary_message = binary_message + struct.pack(self._endian+"Q", crc)
 
