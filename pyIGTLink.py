@@ -174,7 +174,7 @@ class MessageBase(object):
         self._device_name = ""
         # The timestamp field contains a 64-bit timestamp indicating when the data is generated.
         # Please refer http://openigtlink.org/protocols/v2_timestamp.html for the format of the 64-bit timestamp.
-        self._timestamp = time.time()
+        self._timestamp = time.time() * 1000
 
         self._endian = ">"  # big-endian
 
@@ -186,8 +186,8 @@ class MessageBase(object):
         binary_body = self.get_binary_body()
         body_size = self.get_body_pack_size()
         crc = CRC64(binary_body)
-        _timestamp1 = int(self._timestamp)
-        _timestamp2 = _igtl_nanosec_to_frac(int((self._timestamp - _timestamp1)*10**9))
+        _timestamp1 = int(self._timestamp / 1000)
+        _timestamp2 = _igtl_nanosec_to_frac(int((self._timestamp / 1000.0 - _timestamp1)*10**9))
 
         print(self._timestamp, self._timestamp - _timestamp1, _timestamp2)
 
@@ -223,6 +223,13 @@ class MessageBase(object):
 # http://openigtlink.org/protocols/v2_image.html
 class ImageMessage(MessageBase):
     def __init__(self, image, spacing=[1, 1, 1], timestamp=None):
+        """
+        Image package
+        image - image data
+        spacing - spacing in mm
+        timestamp - milliseconds since 1970
+        """
+
         MessageBase.__init__(self)
         self._valid_message = True
         self._name = "IMAGE"
@@ -341,6 +348,13 @@ class ImageMessage(MessageBase):
 
 class ImageMessageMatlab(ImageMessage):
     def __init__(self, image, dim, spacing=[1, 1, 1], timestamp=None):
+        """
+        Image package from Matlab
+        image - image data as vector  reshape(data,1,dim(1)*dim(2))
+        dim - image dimension  [dim(1), dim(2)]
+        spacing - spacing in mm
+        timestamp - milliseconds since 1970
+        """
         try:
             data = np.asarray(image)
         except Exception as e:
