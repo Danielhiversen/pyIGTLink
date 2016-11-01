@@ -188,11 +188,9 @@ class MessageBase(object):
         _timestamp1 = int(self._timestamp / 1000)
         _timestamp2 = _igtl_nanosec_to_frac(int((self._timestamp / 1000.0 - _timestamp1)*10**9))
 
-        print(self._timestamp, self._timestamp - _timestamp1, _timestamp2)
-
         binary_message = struct.pack(self._endian+"H", self._version)
-        binary_message = binary_message + struct.pack(self._endian+"12s", self._name)
-        binary_message = binary_message + struct.pack(self._endian+"20s", self._device_name)
+        binary_message = binary_message + struct.pack(self._endian+"12s", self._name.encode('utf-8'))
+        binary_message = binary_message + struct.pack(self._endian+"20s", self._device_name.encode('utf-8'))
         binary_message = binary_message + struct.pack(self._endian+"II", _timestamp1, _timestamp2)
         binary_message = binary_message + struct.pack(self._endian+"Q", body_size)
         binary_message = binary_message + struct.pack(self._endian+"Q", crc)
