@@ -343,6 +343,94 @@ class ImageMessage(MessageBase):
         self._binary_body = binary_message
 
 
+class TransformMessage(MessageBase):
+    def __init__(self, tform, timestamp=None):
+        """
+        Image package
+        image - image data
+        spacing - spacing in mm
+        timestamp - milliseconds since 1970
+        """
+
+        MessageBase.__init__(self)
+        self._valid_message = True
+        self._name = "TRANSFORM"
+        if timestamp:
+            self._timestamp = timestamp
+
+        try:
+            self._data = np.asarray(tform, dtype=np.float32)
+        except Exception as exp:
+            _print('ERROR, INVALID TRANSFORM. \n' + str(exp))
+            self._valid_message = False
+            return
+
+        if len(self._data.shape) != 2:
+            self._valid_message = False
+            _print('ERROR, INVALID TRANSFORM SIZE. \n')
+            return
+
+
+# transforms are floats
+#        if self._data.dtype == np.int8:
+#            self._datatype_s = 2
+#            self._format_data = "b"
+#        elif self._data.dtype == np.uint8:
+#            self._datatype_s = 3
+#            self._format_data = "B"
+#        elif self._data.dtype == np.int16:
+#            self._datatype_s = 4
+#            self._format_data = "h"
+#        elif self._data.dtype == np.uint16:
+#            self._datatype_s = 5
+#            self._format_data = "H"
+#        elif self._data.dtype == np.int32:
+#            self._datatype_s = 6
+#            self._format_data = "i"
+#        elif self._data.dtype == np.uint32:
+#            self._datatype_s = 7
+#            self._format_data = "I"
+#        elif self._data.dtype == np.float32:
+#            self._datatype_s = 10
+#            self._format_data = "f"
+#        elif self._data.dtype == np.float64:
+#            self._datatype_s = 11
+#            self._format_data = "f"
+#        else:
+#            pass
+        self._data = np.array(self._data, dtype=np.float32)
+        self._datatype_s = 10
+        self._format_data = "f"
+
+        self._matrix = self._data  # A matrix representing the origin pose.
+
+    def pack_body(self):
+        #binary_message = struct.pack(self._endian+"H", IGTL_TRANSFORM_HEADER_VERSION)
+        # transform data, following protocol specification
+        binary_message = struct.pack(self._endian + "f", self._matrix[0, 0]) #R11
+        binary_message = binary_message + struct.pack(self._endian + "f", self._matrix[1, 0]) #R21
+        binary_message = binary_message + struct.pack(self._endian + "f", self._matrix[2, 0]) #R31
+
+
+        binary_message = binary_message + struct.pack(self._endian + "f", self._matrix[0, 1]) #R12
+        binary_message = binary_message + struct.pack(self._endian + "f", self._matrix[1, 1]) #R22
+        binary_message = binary_message + struct.pack(self._endian + "f", self._matrix[2, 1]) #R32
+
+
+        binary_message = binary_message + struct.pack(self._endian + "f", self._matrix[0, 2]) #R13
+        binary_message = binary_message + struct.pack(self._endian + "f", self._matrix[1, 2]) #R23
+        binary_message = binary_message + struct.pack(self._endian + "f", self._matrix[2, 2]) #R33
+
+
+        binary_message = binary_message + struct.pack(self._endian + "f", self._matrix[0, 3]) #TX
+        binary_message = binary_message + struct.pack(self._endian + "f", self._matrix[1, 3]) #TY
+        binary_message = binary_message + struct.pack(self._endian + "f", self._matrix[2, 3]) #TZ
+
+        self._body_pack_size = len(binary_message)
+
+        self._binary_body = binary_message
+
+
 class ImageMessageMatlab(ImageMessage):
     def __init__(self, image, dim, spacing=[1, 1, 1], timestamp=None):
         """
@@ -403,7 +491,9 @@ if __name__ == "__main__":
                 _data = np.random.randn(samples, beams)*50+100
                 # data[:, :, 1] = data[:, :, 1] + 90
                 image_message = ImageMessage(_data)
+                transform_message = TransformMessage(np.eye(4).astype(dtype=np.float32))
                 server.add_message_to_send_queue(image_message)
+                server.add_message_to_send_queue(transform_message)
             time.sleep(0.1)
 
     elif len(sys.argv) == 2:
