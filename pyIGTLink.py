@@ -15,6 +15,7 @@ import sys
 import struct
 import threading
 import time
+
 if sys.version_info >= (3, 0):
     import socketserver as SocketServer
 else:
@@ -26,7 +27,7 @@ IGTL_IMAGE_HEADER_VERSION = 1
 
 class PyIGTLink(SocketServer.TCPServer):
     """ For streaming data over TCP with IGTLink"""
-    def __init__(self, port=18944, localServer=False):
+    def __init__(self, port=18944, localServer=False, iface='eth0'):
         """
         port - port number
         """
@@ -40,12 +41,14 @@ class PyIGTLink(SocketServer.TCPServer):
                 import fcntl
                 soc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 try:
-                    ifname = 'eth0'
+                    ifname = iface
                     host = socket.inet_ntoa(fcntl.ioctl(soc.fileno(), 0x8915, struct.pack('256s', ifname[:15]))[20:24])
                     # http://code.activestate.com/recipes/439094-get-the-ip-address-associated-with-a-network-inter/
                 except:
                     ifname = 'lo'
                     host = socket.inet_ntoa(fcntl.ioctl(soc.fileno(), 0x8915, struct.pack('256s', ifname[:15]))[20:24])
+            else:
+                host = iface  # the iface can be also an ip address in systems where the previous code won't work 
 
         SocketServer.TCPServer.allow_reuse_address = True
         SocketServer.TCPServer.__init__(self, (host, port), TCPRequestHandler)
@@ -187,7 +190,6 @@ class MessageBase(object):
         crc = CRC64(binary_body)
         _timestamp1 = int(self._timestamp / 1000)
         _timestamp2 = _igtl_nanosec_to_frac(int((self._timestamp / 1000.0 - _timestamp1)*10**9))
-
         binary_message = struct.pack(self._endian+"H", self._version)
         binary_message = binary_message + struct.pack(self._endian+"12s", self._name.encode('utf-8'))
         binary_message = binary_message + struct.pack(self._endian+"20s", self._device_name.encode('utf-8'))
@@ -219,7 +221,7 @@ class MessageBase(object):
 
 # http://openigtlink.org/protocols/v2_image.html
 class ImageMessage(MessageBase):
-    def __init__(self, image, spacing=[1, 1, 1], timestamp=None):
+    def __init__(self, image, spacing=[1, 1, 1], timestamp=None, device_name=''):
         """
         Image package
         image - image data
@@ -230,6 +232,7 @@ class ImageMessage(MessageBase):
         MessageBase.__init__(self)
         self._valid_message = True
         self._name = "IMAGE"
+        self._device_name = device_name
         if timestamp:
             self._timestamp = timestamp
 
@@ -296,8 +299,8 @@ class ImageMessage(MessageBase):
 
         binary_message = binary_message + struct.pack(self._endian+"B", 1)  # image coordinate (1:RAS 2:LPS)
 
-        binary_message = binary_message + struct.pack(self._endian+"H", self._data.shape[0])
         binary_message = binary_message + struct.pack(self._endian+"H", self._data.shape[1])
+        binary_message = binary_message + struct.pack(self._endian+"H", self._data.shape[0])
         if len(self._data.shape) > 2:
             binary_message = binary_message + struct.pack(self._endian+"H", self._data.shape[2])
         else:
@@ -344,7 +347,7 @@ class ImageMessage(MessageBase):
 
 
 class TransformMessage(MessageBase):
-    def __init__(self, tform, timestamp=None):
+    def __init__(self, tform, timestamp=None, device_name=''):
         """
         Image package
         image - image data
@@ -355,6 +358,7 @@ class TransformMessage(MessageBase):
         MessageBase.__init__(self)
         self._valid_message = True
         self._name = "TRANSFORM"
+        self._device_name = device_name
         if timestamp:
             self._timestamp = timestamp
 
