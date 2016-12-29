@@ -9,7 +9,7 @@ import unittest
 
 import numpy as np
 
-from pyIGTLink import pyIGTLink
+import pyIGTLink
 
 IGTL_HEADER_SIZE = 58
 
