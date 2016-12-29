@@ -61,6 +61,12 @@ class TestMsg(unittest.TestCase):
         self.assertEqual(len(msg.get_binary_body()), msg.get_body_pack_size())
         self.assertEqual(len(msg.get_binary_message()), msg.get_body_pack_size() + IGTL_HEADER_SIZE)
 
+    def test_transform_msg(self):
+        data = np.random.randn(4, 4)
+        msg = pyIGTLink.TransformMessage(data)
+        self.assertEqual(len(msg.get_binary_body()), msg.get_body_pack_size())
+        self.assertEqual(len(msg.get_binary_message()), msg.get_body_pack_size() + IGTL_HEADER_SIZE)
+
     def test_image_msg_matlab(self):
         data = np.random.randn(500*100, 1)*50+100
         msg = pyIGTLink.ImageMessageMatlab(data, [500, 100])
