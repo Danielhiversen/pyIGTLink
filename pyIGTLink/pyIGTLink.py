@@ -302,8 +302,8 @@ class ImageMessage(MessageBase):
 
         binary_message += struct.pack(self._endian+"B", 1)  # image coordinate (1:RAS 2:LPS)
 
-        binary_message += struct.pack(self._endian+"H", self._data.shape[1])
         binary_message += struct.pack(self._endian+"H", self._data.shape[0])
+        binary_message += struct.pack(self._endian+"H", self._data.shape[1])
         if len(self._data.shape) > 2:
             binary_message += struct.pack(self._endian+"H", self._data.shape[2])
         else:
