@@ -3,8 +3,16 @@ Python implementation of [OpenIGTLink](http://openigtlink.org/)
 
 ALso support sending data from Matlab over IGTLink
 
+Only ImageMessages TransformMessages are implementated at the moment.
 
-Only ImageMessages are implementated at the moment
+Python 2.7 and Python 3 support.
+Tested with [CustusX](http://custusx.org/) and [3D Slicer](https://www.slicer.org).
+
+## Install
+
+```
+pip install pyIGTLink
+```
 
 
 
