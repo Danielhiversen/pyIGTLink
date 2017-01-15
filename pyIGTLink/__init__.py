@@ -1,1 +1,1 @@
-from pyIGTLink import *
+from pyIGTLink import *  # noqa: F403, F401
