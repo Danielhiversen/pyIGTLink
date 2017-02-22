@@ -139,7 +139,9 @@ class PyIGTLinkClient(object):
         self.sock.connect((host, port))
 
     def receive(self):
-        reply = self.sock.recv(IGTL_HEADER_SIZE)  # limit reply to 16K
+        reply = ''
+        while len(reply) < IGTL_HEADER_SIZE:
+            reply += self.sock.recv(IGTL_HEADER_SIZE - len(reply))
         aaa = MessageBase()
         package = aaa.unpack(reply)
         data = None
