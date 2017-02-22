@@ -139,7 +139,6 @@ class PyIGTLinkClient(object):
         self.sock.connect((host, port))
 
     def receive(self):
-        print('receiving')
         reply = self.sock.recv(IGTL_HEADER_SIZE)  # limit reply to 16K
         aaa = MessageBase()
         package = aaa.unpack(reply)
@@ -239,8 +238,6 @@ class MessageBase(object):
         self._crc = values[6]
 
         valid = False
-
-        print(self._name)
 
         return {'type': self._name,
                 'device_name': self._device_name,
@@ -434,7 +431,6 @@ class TransformMessage(MessageBase):
     def unpack_body(self, message):
         s = struct.Struct('> f f f f f f f f f f f f')
         values = s.unpack(message)
-        print(values)
         self._matrix = np.asarray([[values[0], values[3], values[6], values[9]],
                                    [values[1], values[4], values[7], values[10]],
                                    [values[2], values[5], values[8], values[11]],
