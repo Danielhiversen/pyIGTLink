@@ -154,12 +154,12 @@ class PyIGTLinkClient(object):
             if not valid:
                 data = None
 
-        if 'IMAGE' in package['type']:
-            reply = self.sock.recv(package['data_len'])
-            image_message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
-            data, valid = image_message.unpack_body(reply)
-            if not valid:
-                data = None
+        #if 'IMAGE' in package['type']:
+        #    reply = self.sock.recv(package['data_len'])
+        #    image_message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
+        #    data, valid = image_message.unpack_body(reply)
+        #    if not valid:
+        #        data = None
 
         return data
 
@@ -398,7 +398,7 @@ class ImageMessage(MessageBase):
 
         s_imgs = \
             struct.Struct(endian +
-                          ' {}s'.format(len(message[header_portion_len:])))
+                          ' {}P'.format(len(message[header_portion_len:])))
         values_img = s_imgs.unpack(message[header_portion_len:])
         print(len(message[header_portion_len:]))
         self._data = np.fromstring(values_img[0], dtype=np.uint8)
