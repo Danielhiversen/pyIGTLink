@@ -146,7 +146,8 @@ class PyIGTLinkClient(object):
         if 'TRANSFORM' in package['type']:
             reply = ''
             while len(reply) < package['data_len']:
-                reply += self.sock.recv(package['data_len'] - len(reply))  # limit reply to 16K
+                reply += self.sock.recv(package['data_len'] - len(reply))
+                # limit reply to 16K
 
             tform_message = TransformMessage(np.eye(4))
             data, valid = tform_message.unpack_body(reply)
@@ -157,7 +158,6 @@ class PyIGTLinkClient(object):
             reply = ''
             while len(reply) < package['data_len']:
                 reply += self.sock.recv(package['data_len'] - len(reply))
-            print(package['data_len'])
             image_message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
             data, valid = image_message.unpack_body(reply)
             if not valid:
@@ -406,8 +406,8 @@ class ImageMessage(MessageBase):
 
         data = np.squeeze(np.reshape(data, [size_y, size_x, size_z]))
 
-        return {'data': data,
-                'shape': [size_x, size_y, size_z]}, True
+        return {'type': 'IMAGE',
+                'data': data}, True
 
 
 class TransformMessage(MessageBase):
@@ -483,7 +483,7 @@ class TransformMessage(MessageBase):
         # if self._crc == CRC64(self._binary_body):
         #     valid = True
 
-        return self._matrix, valid
+        return {'type': 'TRANSFORM', 'data': self._matrix}, valid
 
 
 class ImageMessageMatlab(ImageMessage):
