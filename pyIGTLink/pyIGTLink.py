@@ -17,10 +17,6 @@ import threading
 import time
 import string
 
-import matplotlib
-matplotlib.use('tkagg')
-import matplotlib.pyplot as plt
-
 if sys.version_info >= (3, 0):
     import socketserver as SocketServer
 else:
@@ -148,18 +144,24 @@ class PyIGTLinkClient(object):
         package = aaa.unpack(reply)
         data = None
         if 'TRANSFORM' in package['type']:
-            reply = self.sock.recv(package['data_len'])  # limit reply to 16K
+            reply = ''
+            while len(reply) < package['data_len']:
+                reply += self.sock.recv(package['data_len'] - len(reply))  # limit reply to 16K
+
             tform_message = TransformMessage(np.eye(4))
             data, valid = tform_message.unpack_body(reply)
             if not valid:
                 data = None
 
-        #if 'IMAGE' in package['type']:
-        #    reply = self.sock.recv(package['data_len'])
-        #    image_message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
-        #    data, valid = image_message.unpack_body(reply)
-        #    if not valid:
-        #        data = None
+        if 'IMAGE' in package['type']:
+            reply = ''
+            while len(reply) < package['data_len']:
+                reply += self.sock.recv(package['data_len'] - len(reply))
+            print(package['data_len'])
+            image_message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
+            data, valid = image_message.unpack_body(reply)
+            if not valid:
+                data = None
 
         return data
 
@@ -396,18 +398,15 @@ class ImageMessage(MessageBase):
         else:
             endian = '>'
 
-        s_imgs = \
-            struct.Struct(endian +
-                          ' {}P'.format(len(message[header_portion_len:])))
-        values_img = s_imgs.unpack(message[header_portion_len:])
-        print(len(message[header_portion_len:]))
-        self._data = np.fromstring(values_img[0], dtype=np.uint8)
-        self._data.reshape = np.squeeze(np.reshape(self._data, [size_x,
-                                                                size_y,
-                                                                size_z]))
-        plt.imshow(self._data)
+        values_img = message[header_portion_len:]
 
-        return {'data': self._data,
+        dt = np.dtype(np.uint8)
+        dt = dt.newbyteorder(endian)
+        data = np.frombuffer(values_img, dtype=dt)
+
+        data = np.squeeze(np.reshape(data, [size_y, size_x, size_z]))
+
+        return {'data': data,
                 'shape': [size_x, size_y, size_z]}, True
 
 
