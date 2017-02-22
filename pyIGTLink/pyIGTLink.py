@@ -15,6 +15,7 @@ import sys
 import struct
 import threading
 import time
+import string
 
 if sys.version_info >= (3, 0):
     import socketserver as SocketServer
@@ -23,6 +24,7 @@ else:
 
 IGTL_HEADER_VERSION = 1
 IGTL_IMAGE_HEADER_VERSION = 1
+IGTL_HEADER_SIZE = 58
 
 
 class PyIGTLink(SocketServer.TCPServer):
@@ -131,6 +133,28 @@ class PyIGTLink(SocketServer.TCPServer):
                     break
 
 
+class PyIGTLinkClient(object):
+    def __init__(self, host, port=18944):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((host, port))
+
+    def receive(self):
+        print('receiving')
+        reply = self.sock.recv(IGTL_HEADER_SIZE)  # limit reply to 16K
+        aaa = MessageBase()
+        package = aaa.unpack(reply)
+        data = None
+        if package['type'] == 'TRANSFORM':
+            reply = self.sock.recv(package['data_len'])  # limit reply to 16K
+            tform_message = TransformMessage(np.eye(4))
+            data, valid = tform_message.unpack_body(reply)
+            if not valid:
+                data = None
+        return data
+
+    def close(self):
+        self.sock.close()
+
 class TCPRequestHandler(SocketServer.BaseRequestHandler):
     """
     Help class for PyIGTLink
@@ -180,25 +204,50 @@ class MessageBase(object):
         self._timestamp = time.time() * 1000
 
         self._endian = ">"  # big-endian
+        self.crc = None
 
         self._binary_body = None
         self._binary_head = None
         self._body_pack_size = 0
+        self._body_size = 0
 
     def pack(self):
         binary_body = self.get_binary_body()
-        body_size = self.get_body_pack_size()
-        crc = CRC64(binary_body)
+        self._body_size = self.get_body_pack_size()
+        self.crc = CRC64(binary_body)
         _timestamp1 = int(self._timestamp / 1000)
         _timestamp2 = _igtl_nanosec_to_frac(int((self._timestamp / 1000.0 - _timestamp1)*10**9))
         binary_message = struct.pack(self._endian+"H", self._version)
         binary_message = binary_message + struct.pack(self._endian+"12s", self._name.encode('utf-8'))
         binary_message = binary_message + struct.pack(self._endian+"20s", self._device_name.encode('utf-8'))
         binary_message = binary_message + struct.pack(self._endian+"II", _timestamp1, _timestamp2)
-        binary_message = binary_message + struct.pack(self._endian+"Q", body_size)
-        binary_message = binary_message + struct.pack(self._endian+"Q", crc)
+        binary_message = binary_message + struct.pack(self._endian+"Q", self._body_size)
+        binary_message = binary_message + struct.pack(self._endian+"Q", self.crc)
 
         self._binary_head = binary_message
+
+    def unpack(self, message):
+        s = struct.Struct('> H 12s 20s II Q Q')  # big-endian
+        values = s.unpack(message)
+        self._version = values[0]
+        self._name = filter(lambda x: x in string.printable, values[1])
+        self._device_name = filter(lambda x: x in string.printable, values[2])
+        _timestamp1 = values[3]
+        _timestamp2 = values[4]
+        self._body_size = values[5]
+        self._crc = values[6]
+
+        data = None
+        valid = False
+
+        print(self._name)
+
+        return {'type': self._name,
+                'device_name': self._device_name,
+                'timestamp': self._timestamp,
+                'valid': valid,
+                'data_len': self._body_size}
+
 
     def get_binary_message(self):
         if not self._binary_head:
@@ -228,6 +277,7 @@ class ImageMessage(MessageBase):
         image - image data
         spacing - spacing in mm
         timestamp - milliseconds since 1970
+        device_name - name of the image
         """
 
         MessageBase.__init__(self)
@@ -249,34 +299,8 @@ class ImageMessage(MessageBase):
             _print('ERROR, INVALID IMAGE SIZE. \n')
             return
 
+        # Only int8 is supported now
 
-# Only int8 is suppoerted now
-#        if self._data.dtype == np.int8:
-#            self._datatype_s = 2
-#            self._format_data = "b"
-#        elif self._data.dtype == np.uint8:
-#            self._datatype_s = 3
-#            self._format_data = "B"
-#        elif self._data.dtype == np.int16:
-#            self._datatype_s = 4
-#            self._format_data = "h"
-#        elif self._data.dtype == np.uint16:
-#            self._datatype_s = 5
-#            self._format_data = "H"
-#        elif self._data.dtype == np.int32:
-#            self._datatype_s = 6
-#            self._format_data = "i"
-#        elif self._data.dtype == np.uint32:
-#            self._datatype_s = 7
-#            self._format_data = "I"
-#        elif self._data.dtype == np.float32:
-#            self._datatype_s = 10
-#            self._format_data = "f"
-#        elif self._data.dtype == np.float64:
-#            self._datatype_s = 11
-#            self._format_data = "f"
-#        else:
-#            pass
         self._data = np.array(self._data, dtype=np.uint8)
         self._datatype_s = 3
         self._format_data = "B"
@@ -352,10 +376,10 @@ class ImageMessage(MessageBase):
 class TransformMessage(MessageBase):
     def __init__(self, tform, timestamp=None, device_name=''):
         """
-        Image package
-        image - image data
-        spacing - spacing in mm
+        Transform package
+        tform - tform data
         timestamp - milliseconds since 1970
+        device_name - name of the tool
         """
 
         MessageBase.__init__(self)
@@ -377,34 +401,8 @@ class TransformMessage(MessageBase):
             _print('ERROR, INVALID TRANSFORM SIZE. \n')
             return
 
+        # transforms are floats
 
-# transforms are floats
-#        if self._data.dtype == np.int8:
-#            self._datatype_s = 2
-#            self._format_data = "b"
-#        elif self._data.dtype == np.uint8:
-#            self._datatype_s = 3
-#            self._format_data = "B"
-#        elif self._data.dtype == np.int16:
-#            self._datatype_s = 4
-#            self._format_data = "h"
-#        elif self._data.dtype == np.uint16:
-#            self._datatype_s = 5
-#            self._format_data = "H"
-#        elif self._data.dtype == np.int32:
-#            self._datatype_s = 6
-#            self._format_data = "i"
-#        elif self._data.dtype == np.uint32:
-#            self._datatype_s = 7
-#            self._format_data = "I"
-#        elif self._data.dtype == np.float32:
-#            self._datatype_s = 10
-#            self._format_data = "f"
-#        elif self._data.dtype == np.float64:
-#            self._datatype_s = 11
-#            self._format_data = "f"
-#        else:
-#            pass
         self._data = np.array(self._data, dtype=np.float32)
         self._datatype_s = 10
         self._format_data = "f"
@@ -433,6 +431,23 @@ class TransformMessage(MessageBase):
         self._body_pack_size = len(binary_message)
 
         self._binary_body = binary_message
+
+    def unpack_body(self, message):
+        s = struct.Struct('> f f f f f f f f f f f f')
+        values = s.unpack(message)
+        print(values)
+        self._matrix = np.asarray([[values[0], values[3], values[6], values[9]],
+                                [values[1], values[4], values[7], values[10]],
+                                [values[2], values[5], values[8], values[11]],
+                                [0, 0, 0, 1]])
+        #self._binary_body = self.pack_body()
+
+        valid = True
+
+        #if self._crc == CRC64(self._binary_body):
+        #    valid = True
+
+        return self._matrix, valid
 
 
 class ImageMessageMatlab(ImageMessage):
@@ -474,54 +489,6 @@ def _igtl_nanosec_to_frac(nanosec):
 
 
 if __name__ == "__main__":
-    """
-    Usage:
-    pyIGTLink.py
-    Run as local server sending random tissue data
-
-    """
-    if len(sys.argv) == 1:
-        print("\n\n   Run as server, sending random data\n\n  ")
-        server = PyIGTLink(localServer=True)
-
-        samples = 500
-        beams = 100
-        k = 0
-
-        while True:
-            if server.is_connected():
-                k = k+1
-                print(k)
-                _data = np.random.randn(samples, beams)*50+100
-                # data[:, :, 1] = data[:, :, 1] + 90
-                image_message = ImageMessage(_data)
-                transform_message = TransformMessage(np.eye(4).astype(dtype=np.float32))
-                server.add_message_to_send_queue(image_message)
-                server.add_message_to_send_queue(transform_message)
-            time.sleep(0.1)
-
-    elif len(sys.argv) == 2:
-        print("\n\n   Run as server, sending moving circle \n\n  ")
-        server = PyIGTLink(localServer=True)
-
-        n = 500
-        r = 90
-
-        k = 0
-        while True:
-            if server.is_connected():
-                k = k+1
-                print(k)
-                a = np.mod(10*k, n)
-                b = np.mod((400*k)/n+30, n)
-                y, x = np.ogrid[-a:n-a, -b:n-b]
-                mask = x*x + y*y <= r*r
-
-                _data = np.ones((n, n))
-                _data[mask] = 255
-
-                print(_data.shape)
-
-                image_message = ImageMessage(_data)
-                server.add_message_to_send_queue(image_message)
-            time.sleep(0.1)
+    client = PyIGTLinkClient('10.18.109.0')
+    client.receive()
+    client.close()
