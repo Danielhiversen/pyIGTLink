@@ -148,6 +148,8 @@ class PyIGTLinkClient(object):
         if 'TRANSFORM' in package['type']:
             reply = ''
             while len(reply) < package['data_len']:
+                print('requesting length tform {}'.format(
+                    package['data_len'] - len(reply)))
                 reply += self.sock.recv(package['data_len'] - len(reply))
                 # limit reply to 16K
 
@@ -159,6 +161,7 @@ class PyIGTLinkClient(object):
         if 'IMAGE' in package['type']:
             reply = ''
             while len(reply) < package['data_len']:
+                print('requesting length image {}'.format(package['data_len'] - len(reply)))
                 reply += self.sock.recv(package['data_len'] - len(reply))
             image_message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
             data, valid = image_message.unpack_body(reply)
