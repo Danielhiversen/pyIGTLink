@@ -483,7 +483,8 @@ class TransformMessage(MessageBase):
         # if self._crc == CRC64(self._binary_body):
         #     valid = True
 
-        return {'type': 'TRANSFORM', 'data': self._matrix}, valid
+        return {'type': 'TRANSFORM',
+                'data': self._matrix}, valid
 
 
 class ImageMessageMatlab(ImageMessage):
