@@ -155,6 +155,7 @@ class PyIGTLinkClient(object):
     def close(self):
         self.sock.close()
 
+
 class TCPRequestHandler(SocketServer.BaseRequestHandler):
     """
     Help class for PyIGTLink
@@ -232,12 +233,11 @@ class MessageBase(object):
         self._version = values[0]
         self._name = filter(lambda x: x in string.printable, values[1])
         self._device_name = filter(lambda x: x in string.printable, values[2])
-        _timestamp1 = values[3]
-        _timestamp2 = values[4]
+        # _timestamp1 = values[3]
+        # _timestamp2 = values[4]
         self._body_size = values[5]
         self._crc = values[6]
 
-        data = None
         valid = False
 
         print(self._name)
@@ -247,7 +247,6 @@ class MessageBase(object):
                 'timestamp': self._timestamp,
                 'valid': valid,
                 'data_len': self._body_size}
-
 
     def get_binary_message(self):
         if not self._binary_head:
@@ -437,15 +436,15 @@ class TransformMessage(MessageBase):
         values = s.unpack(message)
         print(values)
         self._matrix = np.asarray([[values[0], values[3], values[6], values[9]],
-                                [values[1], values[4], values[7], values[10]],
-                                [values[2], values[5], values[8], values[11]],
-                                [0, 0, 0, 1]])
-        #self._binary_body = self.pack_body()
+                                   [values[1], values[4], values[7], values[10]],
+                                   [values[2], values[5], values[8], values[11]],
+                                   [0, 0, 0, 1]])
+        # self._binary_body = self.pack_body()
 
         valid = True
 
-        #if self._crc == CRC64(self._binary_body):
-        #    valid = True
+        # if self._crc == CRC64(self._binary_body):
+        #     valid = True
 
         return self._matrix, valid
 
