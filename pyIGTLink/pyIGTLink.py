@@ -155,7 +155,7 @@ class PyIGTLinkClient(object):
             data, valid = tform_message.unpack_body(reply)
             if not valid:
                 data = None
-
+        '''
         if 'IMAGE' in package['type']:
             reply = ''
             while len(reply) < package['data_len']:
@@ -168,7 +168,7 @@ class PyIGTLinkClient(object):
             data, valid = image_message.unpack_body(reply)
             if not valid:
                 data = None
-
+        '''
         return data
 
     def close(self):
