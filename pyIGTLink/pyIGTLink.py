@@ -146,8 +146,8 @@ class PyIGTLinkClient(object):
             len_count += len(reply[-1])
         reply = ''.join(reply)
 
-        aaa = MessageBase()
-        package = aaa.unpack(reply)
+        base_message = MessageBase()
+        package = base_message.unpack(reply)
         data = None
 
         reply = []
