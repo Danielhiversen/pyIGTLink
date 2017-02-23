@@ -143,9 +143,8 @@ class PyIGTLinkClient(object):
         len_count = 0
         while len_count < IGTL_HEADER_SIZE:
             reply.append(self.sock.recv(IGTL_HEADER_SIZE - len_count))
-            len_count += len(reply[-1:])
+            len_count += len(reply[-1])
         reply = ''.join(reply)
-        print(reply)
 
         aaa = MessageBase()
         package = aaa.unpack(reply)
@@ -155,7 +154,7 @@ class PyIGTLinkClient(object):
         len_count = 0
         while len_count < package['data_len']:
             reply.append(self.sock.recv(package['data_len'] - len_count))
-            len_count += len(reply[-1:])
+            len_count += len(reply[-1])
         reply = ''.join(reply)
 
         if 'TRANSFORM' in package['type']:
