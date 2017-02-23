@@ -139,16 +139,23 @@ class PyIGTLinkClient(object):
         self.sock.connect((host, port))
 
     def receive(self):
-        reply = ''
-        while len(reply) < IGTL_HEADER_SIZE:
-            reply += self.sock.recv(IGTL_HEADER_SIZE - len(reply))
+        reply = []
+        len_count = 0
+        while len_count < IGTL_HEADER_SIZE:
+            reply.append(self.sock.recv(IGTL_HEADER_SIZE - len_count))
+            len_count += len(reply[-1:])
+        reply = ''.join(reply)
+
         aaa = MessageBase()
         package = aaa.unpack(reply)
         data = None
 
-        reply = ''
-        while len(reply) < package['data_len']:
-            reply += self.sock.recv(package['data_len'] - len(reply))
+        reply = []
+        len_count = 0
+        while len_count < package['data_len']:
+            reply.append(self.sock.recv(package['data_len'] - len_count))
+            len_count += len(reply[-1:])
+        reply = ''.join(reply)
 
         if 'TRANSFORM' in package['type']:
             tform_message = TransformMessage(np.eye(4))
