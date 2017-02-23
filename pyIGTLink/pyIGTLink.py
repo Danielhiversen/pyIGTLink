@@ -145,6 +145,7 @@ class PyIGTLinkClient(object):
             reply.append(self.sock.recv(IGTL_HEADER_SIZE - len_count))
             len_count += len(reply[-1:])
         reply = ''.join(reply)
+        print(reply)
 
         aaa = MessageBase()
         package = aaa.unpack(reply)
