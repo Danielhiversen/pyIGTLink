@@ -145,34 +145,23 @@ class PyIGTLinkClient(object):
         aaa = MessageBase()
         package = aaa.unpack(reply)
         data = None
-        if 'TRANSFORM' in package['type']:
-            reply = ''
-            while len(reply) < package['data_len']:
-                print(
-                    'requesting length tform {} data-len is {}, len(reply) is {}'.format(
-                        package['data_len'] - len(reply), package['data_len'],
-                        len(reply)))
-                reply += self.sock.recv(package['data_len'] - len(reply))
-                # limit reply to 16K
 
+        reply = ''
+        while len(reply) < package['data_len']:
+            reply += self.sock.recv(package['data_len'] - len(reply))
+
+        if 'TRANSFORM' in package['type']:
             tform_message = TransformMessage(np.eye(4))
             data, valid = tform_message.unpack_body(reply)
             if not valid:
                 data = None
-        '''
+
         if 'IMAGE' in package['type']:
-            reply = ''
-            while len(reply) < package['data_len']:
-                if (package['data_len'] - len(reply)) > 400000:
-                    print(
-                    'requesting length image {} data-len is {}, len(reply) is {}'.format(
-                        package['data_len'] - len(reply), package['data_len'],
-                        len(reply)))
             image_message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
             data, valid = image_message.unpack_body(reply)
             if not valid:
                 data = None
-        '''
+
         return data
 
     def close(self):
