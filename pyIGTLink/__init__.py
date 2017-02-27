@@ -1,1 +1,1 @@
-from pyIGTLink import *
+from .pyIGTLink import *
