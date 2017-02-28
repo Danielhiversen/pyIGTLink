@@ -252,10 +252,15 @@ class MessageBase(object):
         self._version = values[0]
         self._name = filter(lambda x: x in string.printable, values[1])
         self._device_name = filter(lambda x: x in string.printable, values[2])
-        # _timestamp1 = values[3]
-        # _timestamp2 = values[4]
+
+        seconds = float(values[3])
+        frac_of_second = values[4]
+        nanoseconds = float(_igtl_frac_to_nanosec(frac_of_second))
+
+        timestamp = seconds + (nanoseconds * 1e-9)
+        print(timestamp)
+
         self._body_size = values[5]
-        self._crc = values[6]
 
         valid = False
 
@@ -263,7 +268,8 @@ class MessageBase(object):
                 'device_name': self._device_name,
                 'timestamp': self._timestamp,
                 'valid': valid,
-                'data_len': self._body_size}
+                'data_len': self._body_size,
+                'timestamp': timestamp,}
 
     def get_binary_message(self):
         if not self._binary_head:
@@ -482,12 +488,8 @@ class TransformMessage(MessageBase):
                                    [values[1], values[4], values[7], values[10]],
                                    [values[2], values[5], values[8], values[11]],
                                    [0, 0, 0, 1]])
-        # self._binary_body = self.pack_body()
 
         valid = True
-
-        # if self._crc == CRC64(self._binary_body):
-        #     valid = True
 
         return {'type': 'TRANSFORM',
                 'data': self._matrix}, valid
@@ -527,6 +529,18 @@ def _igtl_nanosec_to_frac(nanosec):
         if (nanosec >= base):
             r |= mask
             nanosec = nanosec - base
+        mask >>= 1
+    return r
+
+# https://github.com/openigtlink/OpenIGTLink/blob/cf9619e2fece63be0d30d039f57b1eb4d43b1a75/Source/igtlutil/igtl_util.c#L193
+def _igtl_frac_to_nanosec(frac):
+    base = 1000000000 # 10^9
+    mask = 0x80000000
+    r = 0x00000000
+    while mask:
+        base += 1
+        base >>= 1
+        r += base if (frac & mask) else 0
         mask >>= 1
     return r
 
