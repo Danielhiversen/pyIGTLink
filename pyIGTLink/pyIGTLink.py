@@ -160,15 +160,17 @@ class PyIGTLinkClient(object):
         if 'TRANSFORM' in package['type']:
             tform_message = TransformMessage(np.eye(4))
             data, valid = tform_message.unpack_body(reply)
+            data['timestamp'] = package['timestamp']
             if not valid:
                 data = None
 
         if 'IMAGE' in package['type']:
             image_message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
             data, valid = image_message.unpack_body(reply)
+            data['timestamp'] = package['timestamp']
             if not valid:
                 data = None
-        data['timestamp'] = package['timestamp']
+
         return data
 
     def close(self):
