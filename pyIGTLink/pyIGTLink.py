@@ -168,7 +168,7 @@ class PyIGTLinkClient(object):
             data, valid = image_message.unpack_body(reply)
             if not valid:
                 data = None
-
+        data['timestamp'] = package['timestamp']
         return data
 
     def close(self):
