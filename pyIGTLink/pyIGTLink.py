@@ -260,7 +260,6 @@ class MessageBase(object):
         nanoseconds = float(_igtl_frac_to_nanosec(frac_of_second))
 
         timestamp = seconds + (nanoseconds * 1e-9)
-        print(timestamp)
 
         self._body_size = values[5]
 
