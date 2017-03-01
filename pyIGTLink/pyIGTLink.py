@@ -309,7 +309,8 @@ class ImageMessage(MessageBase):
         self._device_name = device_name
         if timestamp:
             self._timestamp = timestamp
-
+        else:
+            self._timestamp = time.time() * 1000
         try:
             self._data = np.asarray(image)
         except Exception as exp:
