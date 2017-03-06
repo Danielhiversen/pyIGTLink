@@ -47,8 +47,7 @@ class PyIGTLink(SocketServer.TCPServer):
                     host = socket.inet_ntoa(fcntl.ioctl(soc.fileno(), 0x8915, struct.pack('256s', ifname[:15]))[20:24])
                     # http://code.activestate.com/recipes/439094-get-the-ip-address-associated-with-a-network-inter/
                 except:
-                    ifname = 'lo'
-                    host = socket.inet_ntoa(fcntl.ioctl(soc.fileno(), 0x8915, struct.pack('256s', ifname[:15]))[20:24])
+                    pass
             else:
                 # the iface can be also an ip address in systems where the previous code won't work
                 host = iface
