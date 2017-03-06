@@ -54,7 +54,7 @@ class PyIGTLink(SocketServer.TCPServer):
                 host = iface
 
         SocketServer.TCPServer.allow_reuse_address = True
-        SocketServer.TCPServer.__init__(self, (socket.gethostbyname(host), port), TCPRequestHandler)
+        SocketServer.TCPServer((socket.gethostbyname(host), port), TCPRequestHandler)
 
         self.message_queue = collections.deque(maxlen=buffer_size)
         self.lock_server_thread = threading.Lock()
