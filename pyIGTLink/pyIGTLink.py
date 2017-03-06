@@ -51,7 +51,7 @@ class PyIGTLink(SocketServer.TCPServer):
                     host = socket.inet_ntoa(fcntl.ioctl(soc.fileno(), 0x8915, struct.pack('256s', ifname[:15]))[20:24])
             else:
                 # the iface can be also an ip address in systems where the previous code won't work
-                host = iface
+                host = socket.inet_ntoa(iface)
 
         SocketServer.TCPServer.allow_reuse_address = True
         SocketServer.TCPServer.__init__(self, (host, port), TCPRequestHandler)
