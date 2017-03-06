@@ -152,7 +152,6 @@ class PyIGTLinkClient(object):
 
         reply = []
         len_count = 0
-        print(package['data_len'])
         while len_count < package['data_len']:
             reply.append(self.sock.recv(package['data_len'] - len_count))
             len_count += len(reply[-1])
