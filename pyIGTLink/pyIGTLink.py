@@ -30,7 +30,7 @@ IGTL_HEADER_SIZE = 58
 class PyIGTLink(SocketServer.TCPServer):
     """ For streaming data over TCP with IGTLink"""
     def __init__(self, port=18944, host='127.0.0.1'):
-
+        buffer_size = 100
         print('running server on {}, port {}'.format(host, port))
         SocketServer.TCPServer.allow_reuse_address = True
         SocketServer.TCPServer.__init__(self, (host, port), TCPRequestHandler)
