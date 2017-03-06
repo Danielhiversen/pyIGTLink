@@ -29,28 +29,8 @@ IGTL_HEADER_SIZE = 58
 
 class PyIGTLink(SocketServer.TCPServer):
     """ For streaming data over TCP with IGTLink"""
-    def __init__(self, port=18944, localServer=False, iface='eth0'):
-        """
-        port - port number
-        """
-        buffer_size = 100
-        if localServer:
-            host = "127.0.0.1"
-        else:
-            if sys.platform.startswith('win32'):
-                host = socket.gethostbyname(socket.gethostname())
-            elif sys.platform.startswith('linux'):
-                import fcntl
-                soc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                try:
-                    ifname = iface
-                    host = socket.inet_ntoa(fcntl.ioctl(soc.fileno(), 0x8915, struct.pack('256s', ifname[:15]))[20:24])
-                    # http://code.activestate.com/recipes/439094-get-the-ip-address-associated-with-a-network-inter/
-                except:
-                    pass
-            else:
-                # the iface can be also an ip address in systems where the previous code won't work
-                host = iface
+    def __init__(self, port=18944, host='127.0.0.1'):
+
         print('running server on {}, port {}'.format(host, port))
         SocketServer.TCPServer.allow_reuse_address = True
         SocketServer.TCPServer.__init__(self, (host, port), TCPRequestHandler)
