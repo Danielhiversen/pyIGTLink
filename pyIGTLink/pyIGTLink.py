@@ -54,7 +54,7 @@ class PyIGTLink(SocketServer.TCPServer):
                 host = iface
 
         SocketServer.TCPServer.allow_reuse_address = True
-        SocketServer.TCPServer((socket.gethostbyname(host), port), TCPRequestHandler)
+        SocketServer.TCPServer.__init__(self, (host, port), TCPRequestHandler)
 
         self.message_queue = collections.deque(maxlen=buffer_size)
         self.lock_server_thread = threading.Lock()
@@ -115,7 +115,7 @@ class PyIGTLink(SocketServer.TCPServer):
         self._connected = False
         with self.lock_server_thread:
             self.shuttingdown = True
-        #self.shutdown()
+        self.shutdown()
         self.server_close()
         _print("\nServer closed\n")
 
