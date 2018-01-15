@@ -1,5 +1,5 @@
 function sendToCX(input_data) 
-    igtlink_path = 'C:\Users\danielho\Documents\pyIGTLink\';
+    igtlink_path = 'C:\Users\verasonics\Documents\MATLAB\danielho\pyIGTLink\';
     global server;
     global IGTLink;
     persistent ctr;
@@ -16,12 +16,14 @@ function sendToCX(input_data)
             insert(py.sys.path,int32(0), igtlink_path);
         end
         IGTLink = py.importlib.import_module('pyIGTLink'); % load the IGTLink module
-        server = IGTLink.PyIGTLink(int16(18944),true); % start the server 
+        server = IGTLink.PyIGTLink(int16(18944), false); % start the server 
     end
 
     imdata = input_data(:, :, 1, ctr);
     dim = size(imdata);
-    imdata = imdata/max(imdata(:))*255;
+    imdata = imdata/max(imdata(:))*255; % TODO
+    Resource = evalin('base','Resource');
+    Resource.RcvBuffer
     PData = evalin('base','PData');
     spacing = [PData.PDelta(1), PData.PDelta(3), PData.PDelta(2)];
     packet = IGTLink.ImageMessageMatlab(reshape(imdata', 1, dim(1)*dim(2)), [dim(1), dim(2)], spacing);
