@@ -44,7 +44,7 @@ class PyIGTLink(SocketServer.TCPServer):
                     ifname = iface
                     host = socket.inet_ntoa(fcntl.ioctl(soc.fileno(), 0x8915, struct.pack('256s', ifname[:15]))[20:24])
                     # http://code.activestate.com/recipes/439094-get-the-ip-address-associated-with-a-network-inter/
-                except:
+                except: # noqa
                     ifname = 'lo'
                     host = socket.inet_ntoa(fcntl.ioctl(soc.fileno(), 0x8915, struct.pack('256s', ifname[:15]))[20:24])
             else:
