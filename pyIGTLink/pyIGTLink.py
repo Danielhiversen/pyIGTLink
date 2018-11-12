@@ -435,6 +435,27 @@ class TransformMessage(MessageBase):
         self._binary_body = binary_message
 
 
+class StringMessage(MessageBase):
+    def __init__(self, string, timestamp=None, device_name='', encoding=3):
+
+        MessageBase.__init__(self)
+        self._valid_message = True
+        self._name = "STRING"
+        if timestamp:
+            self._timestamp = timestamp
+        self._device_name = device_name
+        self._encoding = encoding  # Character encoding type as MIBenum value. Default=3 (US-ASCII).
+        self._string = string
+
+    def pack_body(self):
+        binary_message = struct.pack(self._endian+"H", self._encoding)
+        binary_message += struct.pack(self._endian+"H", len(self._string))
+        binary_message += self._string
+
+        self._body_pack_size = len(binary_message)
+        self._binary_body = binary_message
+
+
 class ImageMessageMatlab(ImageMessage):
     def __init__(self, image, dim, spacing=[1, 1, 1], timestamp=None):
         """
