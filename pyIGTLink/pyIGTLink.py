@@ -179,6 +179,13 @@ class PyIGTLinkClient(object):
             if not valid:
                 data = None
 
+        if 'STRING' in package['type']:
+            string_message = StringMessage("")
+            data, valid = string_message.unpack_body(reply)
+            data['timestamp'] = package['timestamp']
+            if not valid:
+                data = None
+
         return data
 
     def close(self):
@@ -574,6 +581,18 @@ class StringMessage(MessageBase):
         self._body_pack_size = len(binary_message)
         self._binary_body = binary_message
 
+    def unpack_body(self, message):
+        header_portion_len = 2 + 2
+        s_head = struct.Struct('> H H')
+
+        values_header = s_head.unpack(message[:header_portion_len])
+        self._encoding = values_header[0]
+        self._string = str(message[header_portion_len:])
+
+        valid = True
+
+        return {'type': 'STRING',
+                'data': self._string}, valid
 
 class ImageMessageMatlab(ImageMessage):
     def __init__(self, image, dim, spacing=[1, 1, 1], timestamp=None):
@@ -646,10 +665,12 @@ if __name__ == "__main__":
                 print(k)
                 _data = np.random.randn(samples, beams)*50+100
                 # data[:, :, 1] = data[:, :, 1] + 90
-                image_message = ImageMessage(_data)
-                transform_message = TransformMessage(np.eye(4).astype(dtype=np.float32))
+                image_message = ImageMessage(_data, device_name="ImageMessage")
+                transform_message = TransformMessage(np.random.rand(4,4).astype(dtype=np.float32), device_name="TransformMessage")
+                string_message = StringMessage("TestingString_"+str(k), device_name="StringMessage")
                 server.add_message_to_send_queue(image_message)
                 server.add_message_to_send_queue(transform_message)
+                server.add_message_to_send_queue(string_message)
             time.sleep(0.1)
 
     elif len(sys.argv) == 2:
@@ -674,6 +695,6 @@ if __name__ == "__main__":
 
                 print(_data.shape)
 
-                image_message = ImageMessage(_data)
+                image_message = ImageMessage(_data, device_name="OpenIGTLink")
                 server.add_message_to_send_queue(image_message)
             time.sleep(0.1)
