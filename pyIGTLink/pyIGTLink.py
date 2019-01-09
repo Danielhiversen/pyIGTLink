@@ -143,50 +143,42 @@ class PyIGTLinkClient(object):
         self.sock.settimeout(timeout)
 
     def receive(self):
-        reply = []
+        header = []
         len_count = 0
         while len_count < IGTL_HEADER_SIZE:
-            reply.append(self.sock.recv(IGTL_HEADER_SIZE - len_count))
-            if (len(reply[-1]) == 0):
+            header.append(self.sock.recv(IGTL_HEADER_SIZE - len_count))
+            if (len(header[-1]) == 0):
               return None
-            len_count += len(reply[-1])
-        reply = ''.join(reply)
+            len_count += len(header[-1])
+        header = ''.join(header)
 
         base_message = MessageBase()
-        package = base_message.unpack(reply)
-        data = None
+        package = base_message.unpack(header)
+        body_size = package['body_size']
+        type = package['type']
 
-        reply = []
+        body = []
         len_count = 0
-        while len_count < package['data_len']:
-            reply.append(self.sock.recv(package['data_len'] - len_count))
-            if (len(reply[-1]) == 0):
+        while len_count < body_size:
+            body.append(self.sock.recv(body_size - len_count))
+            if (len(body[-1]) == 0):
               return None
-            len_count += len(reply[-1])
-        reply = ''.join(reply)
+            len_count += len(body[-1])
+        body = ''.join(body)
 
-        if 'TRANSFORM' in package['type']:
-            tform_message = TransformMessage(np.eye(4))
-            data, valid = tform_message.unpack_body(reply)
-            data['timestamp'] = package['timestamp']
-            if not valid:
-                data = None
+        message = None
+        if type == 'TRANSFORM':
+            message = TransformMessage(np.eye(4))
+        if type =='IMAGE':
+            message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
+        if type == 'STRING':
+            message = StringMessage("")
 
-        if 'IMAGE' in package['type']:
-            image_message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
-            data, valid = image_message.unpack_body(reply)
-            data['timestamp'] = package['timestamp']
-            if not valid:
-                data = None
-
-        if 'STRING' in package['type']:
-            string_message = StringMessage("")
-            data, valid = string_message.unpack_body(reply)
-            data['timestamp'] = package['timestamp']
-            if not valid:
-                data = None
-
-        return data
+        message.unpack(header)
+        _, valid = message.unpack_body(body)
+        if not valid:
+            return None
+        return message
 
     def close(self):
         self.sock.close()
@@ -230,9 +222,9 @@ class MessageBase(object):
         # Version number The version number field specifies the header format version. Currently the version number is 1.
         # Please note that this is different from the protocol version.
         self._version = IGTL_HEADER_VERSION
-        # The type name field is an ASCII character string specifying the type of the data contained in
+        # The type field is an ASCII character string specifying the type of the data contained in
         # the message body e.g. TRANSFORM. The length of the type name must be within 12 characters.
-        self._name = ""
+        self._type = ""
         # The device name field contains an ASCII character string specifying the name of the the message.
         self._device_name = ""
         # The timestamp field contains a 64-bit timestamp indicating when the data is generated.
@@ -254,7 +246,7 @@ class MessageBase(object):
         _timestamp1 = int(self._timestamp / 1000)
         _timestamp2 = _igtl_nanosec_to_frac(int((self._timestamp / 1000.0 - _timestamp1)*10**9))
         binary_message = struct.pack(self._endian+"H", self._version)
-        binary_message = binary_message + struct.pack(self._endian+"12s", self._name.encode('utf-8'))
+        binary_message = binary_message + struct.pack(self._endian+"12s", self._type.encode('utf-8'))
         binary_message = binary_message + struct.pack(self._endian+"20s", self._device_name.encode('utf-8'))
         binary_message = binary_message + struct.pack(self._endian+"II", _timestamp1, _timestamp2)
         binary_message = binary_message + struct.pack(self._endian+"Q", self._body_size)
@@ -266,7 +258,7 @@ class MessageBase(object):
         s = struct.Struct('> H 12s 20s II Q Q')  # big-endian
         values = s.unpack(message)
         self._version = values[0]
-        self._name = filter(lambda x: x in string.printable, values[1])
+        self._type = filter(lambda x: x in string.printable, values[1])
         self._device_name = filter(lambda x: x in string.printable, values[2])
 
         seconds = float(values[3])
@@ -279,11 +271,11 @@ class MessageBase(object):
 
         valid = False
 
-        return {'type': self._name,
+        return {'type': self._type,
                 'device_name': self._device_name,
                 'timestamp': self._timestamp,
                 'valid': valid,
-                'data_len': self._body_size,
+                'body_size': self._body_size,
                 'timestamp': timestamp,}
 
     def get_binary_message(self):
@@ -319,7 +311,7 @@ class ImageMessage(MessageBase):
 
         MessageBase.__init__(self)
         self._valid_message = True
-        self._name = "IMAGE"
+        self._type = "IMAGE"
         self._device_name = device_name
         if timestamp:
             self._timestamp = timestamp
@@ -474,7 +466,7 @@ class TransformMessage(MessageBase):
 
         MessageBase.__init__(self)
         self._valid_message = True
-        self._name = "TRANSFORM"
+        self._type = "TRANSFORM"
         self._device_name = device_name
         if timestamp:
             self._timestamp = timestamp
@@ -566,7 +558,7 @@ class StringMessage(MessageBase):
 
         MessageBase.__init__(self)
         self._valid_message = True
-        self._name = "STRING"
+        self._type = "STRING"
         if timestamp:
             self._timestamp = timestamp
         self._device_name = device_name
