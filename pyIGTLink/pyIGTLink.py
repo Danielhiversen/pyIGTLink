@@ -56,7 +56,7 @@ class PyIGTLink():
       return False
 
   def send_message(self, message, wait=False):
-      self._add_message_to_send_queue(message, wait)
+      return self._add_message_to_send_queue(message, wait)
 
   def get_latest_messages(self):
       messages = []
@@ -83,6 +83,7 @@ class PyIGTLink():
           if len(self.message_queue) > 0:
               with self.lock_server_thread:
                   self.message_queue = collections.clear()
+          return False
       return True
 
   def _send_queued_message_from_socket(self, socket):
@@ -270,21 +271,27 @@ class PyIGTLinkClient(PyIGTLink):
 
         with self.lock_client_thread:
           self.server_stop = True
-
         while True:
           with self.lock_client_thread:
             if self.server_running:
               return True
 
         self._connected = False
+        self._running = False
         return False
 
     def _client_thread_function(self):
         while True:
+            with self.lock_client_thread:
+                if self.server_stop:
+                    if self.socket is not None:
+                      self.socket.close()
+                    self.server_running = True
+                    break
 
             if self.socket is None:
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.socket.settimeout(5.0)
+                self.socket.settimeout(0.001)
                 self._connected = False
 
             if not self._connected:
@@ -297,16 +304,14 @@ class PyIGTLinkClient(PyIGTLink):
             if not self._connected:
              continue
 
-            if not self._receive_message_from_socket(self.socket):
-              self._connected = False
-              continue
+            try:
+              if not self._receive_message_from_socket(self.socket):
+                self._connected = False
+                continue
+            except Exception as exp:
+              pass
 
             self._send_queued_message_from_socket(self.socket)
-            with self.lock_client_thread:
-              if self.server_stop:
-                self.socket.close()
-                self.server_running = True
-                break
 
 class TCPRequestHandler(SocketServer.BaseRequestHandler):
     """
@@ -315,9 +320,8 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         self.server.update_connected_status(True)
         while True:
-
             # Receive
-            self.request.settimeout(0.01)
+            self.request.settimeout(0.001)
             try:
               self.server._receive_message_from_socket(self.request)
             except Exception as exp:
@@ -792,12 +796,6 @@ if __name__ == "__main__":
                 messages = server.get_latest_messages()
                 for message in messages:
                   print(message._device_name)
-                  if message._type == "STRING":
-                    print ("    " + message._string)
-                  if message._type == "TRANSFORM":
-                    print ("    " + str(message._matrix))
-                  if message._type == "IMAGE":
-                    print ("    " + str(message._image))
 
             time.sleep(0.1)
 
