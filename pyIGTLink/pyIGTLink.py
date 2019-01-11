@@ -26,14 +26,147 @@ IGTL_HEADER_VERSION = 1
 IGTL_IMAGE_HEADER_VERSION = 1
 IGTL_HEADER_SIZE = 58
 
+IGTL_TYPE_UNDEFINED = "?"
+IGTL_TYPE_SERVER = "S"
+IGTL_TYPE_CLIENT = "C"
 
-class PyIGTLink(SocketServer.TCPServer):
+class PyIGTLink():
+
+  buffer_size = 100
+  server_stop = False
+  server_running = False
+
+  connection_type = IGTL_TYPE_UNDEFINED
+
+  _shut_down = False
+  _running = False
+  _connected = False
+
+  incoming_messages = {}
+  message_queue = collections.deque(maxlen=buffer_size)
+
+  def __init__(self):
+      self.lock_received_messages = threading.Lock()
+      self.lock_server_thread = threading.Lock()
+
+  def start(self):
+      return False
+
+  def stop(self):
+      return False
+
+  def send_message(self, message, wait=False):
+      self._add_message_to_send_queue(message, wait)
+
+  def get_latest_messages(self):
+      messages = []
+      with self.lock_received_messages:
+          for device_name in self.incoming_messages:
+              message = self.incoming_messages[device_name]
+              messages.append(message)
+          self.incoming_messages = {}
+      return messages
+
+  def _add_message_to_send_queue(self, message, wait=False):
+      """
+          Returns True if sucessfull
+      """
+      if not isinstance(message, MessageBase) or not message.is_valid():
+          _print("Warning: Only accepts valid messages of class message")
+          return False
+      if self._connected:
+          with self.lock_server_thread:
+              self.message_queue.append(message)  # copy.deepcopy(message))
+          while wait and len(self.message_queue) > 0:
+              time.sleep(0.001)
+      else:
+          if len(self.message_queue) > 0:
+              with self.lock_server_thread:
+                  self.message_queue = collections.clear()
+      return True
+
+  def _send_queued_message_from_socket(self, socket):
+      with self.lock_server_thread:
+          if len(self.message_queue) > 0:
+            message = self.message_queue.popleft()
+            response_data = message.get_binary_message()
+            try:
+                socket.sendall(response_data)
+            except Exception as exp:
+                self.update_connected_status(False)
+                _print('ERROR, FAILED TO SEND DATA. \n'+str(exp))
+
+  def _send_message_from_socket(self, message, socket):
+      if socket is None:
+          return False
+      binary_message = message.get_binary_message()
+      try:
+          socket.sendall(binary_message)
+      except Exception as exp:
+          self.update_connected_status(False)
+          _print('ERROR, FAILED TO SEND DATA. \n'+str(exp))
+          return
+
+  def _receive_message_from_socket(self, socket):
+      header = []
+      len_count = 0
+      while len_count < IGTL_HEADER_SIZE:
+          header.append(socket.recv(IGTL_HEADER_SIZE - len_count))
+          if (len(header[-1]) == 0):
+            return False
+          len_count += len(header[-1])
+      header = ''.join(header)
+
+      base_message = MessageBase()
+      package = base_message.unpack(header)
+      body_size = package['body_size']
+      type = package['type']
+
+      body = []
+      len_count = 0
+      while len_count < body_size:
+          body.append(socket.recv(body_size - len_count))
+          if (len(body[-1]) == 0):
+            return False
+          len_count += len(body[-1])
+      body = ''.join(body)
+
+      message = None
+      if type == 'TRANSFORM':
+          message = TransformMessage(np.eye(4))
+      if type =='IMAGE':
+          message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
+      if type == 'STRING':
+          message = StringMessage("")
+
+      message.unpack(header)
+      valid = message.unpack_body(body)
+      if not valid:
+          return False
+
+      device_name = message._device_name
+      with self.lock_received_messages:
+          self.incoming_messages[device_name] = message
+      return True
+
+  def is_connected(self):
+      return self._connected
+
+  def update_connected_status(self, val):
+      self._connected = val
+
+
+class PyIGTLinkServer(SocketServer.TCPServer, PyIGTLink):
+
     """ For streaming data over TCP with IGTLink"""
     def __init__(self, port=18944, localServer=False, iface='eth0'):
         """
         port - port number
         """
-        buffer_size = 100
+        PyIGTLink.__init__(self)
+
+        connection_type = IGTL_TYPE_SERVER
+
         if localServer:
             host = "127.0.0.1"
         else:
@@ -56,15 +189,10 @@ class PyIGTLink(SocketServer.TCPServer):
         SocketServer.TCPServer.allow_reuse_address = True
         SocketServer.TCPServer.__init__(self, (host, port), TCPRequestHandler)
 
-        self.message_queue = collections.deque(maxlen=buffer_size)
-        self.lock_server_thread = threading.Lock()
-
-        self._connected = False
-        self.shuttingdown = False
-
         signal.signal(signal.SIGTERM, self._signal_handler)
         signal.signal(signal.SIGINT, self._signal_handler)
 
+    def start(self):
         server_thread = threading.Thread(target=self.serve_forever)
         server_thread.daemon = True
         server_thread.start()
@@ -73,30 +201,14 @@ class PyIGTLink(SocketServer.TCPServer):
         thread.daemon = True
         thread.start()
 
+    def stop(self):
+      self.close_server()
+
     def get_ip_adress(self):
         return self.server_address[0]
 
     def get_port_no(self):
         return self.server_address[1]
-
-    def add_message_to_send_queue(self, message, wait=False):
-        """
-            Returns True if sucessfull
-        """
-        if not isinstance(message, MessageBase) or not message.is_valid():
-            _print("Warning: Only accepts valid messages of class message")
-            return False
-
-        if self._connected:
-            with self.lock_server_thread:
-                self.message_queue.append(message)  # copy.deepcopy(message))
-            while wait and len(self.message_queue) > 0:
-                time.sleep(0.001)
-        else:
-            if len(self.message_queue) > 0:
-                with self.lock_server_thread:
-                    self.message_queue = collections.clear()
-        return True
 
     def _signal_handler(self, signum, stackframe):
         if signum == signal.SIGTERM or signum == signal.SIGINT:
@@ -104,17 +216,11 @@ class PyIGTLink(SocketServer.TCPServer):
             _print('YOU KILLED ME, BUT I CLOSED THE SERVER BEFORE I DIED')
             sys.exit(signum)
 
-    def is_connected(self):
-        return self._connected
-
-    def update_connected_status(self, val):
-        self._connected = val
-
     def close_server(self):
         """Will close connection and shutdown server"""
         self._connected = False
         with self.lock_server_thread:
-            self.shuttingdown = True
+            self.server_stop = True
         self.shutdown()
         self.server_close()
         _print("\nServer closed\n")
@@ -123,65 +229,85 @@ class PyIGTLink(SocketServer.TCPServer):
         while True:
             while not self._connected:
                 with self.lock_server_thread:
-                    if self.shuttingdown:
+                    if self.server_stop:
                         _print("No connections\nIp adress: " + str(self.get_ip_adress()) + "\nPort number: " + str(self.get_port_no()))
                         break
                 time.sleep(5)
             time.sleep(10)
             with self.lock_server_thread:
-                if self.shuttingdown:
+                if self.server_stop:
+                    self.server_running = True
                     break
 
 
-class PyIGTLinkClient(object):
-    def __init__(self, host, port=18944):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((host, port))
-        self.sock.settimeout(0.1)
+class PyIGTLinkClient(PyIGTLink):
+    def __init__(self, host="127.0.0.1", port=18944):
+        PyIGTLink.__init__(self)
 
-    def setTimeout(self, timeout):
-        self.sock.settimeout(timeout)
+        self.connection_type = IGTL_TYPE_CLIENT
 
-    def receive(self):
-        header = []
-        len_count = 0
-        while len_count < IGTL_HEADER_SIZE:
-            header.append(self.sock.recv(IGTL_HEADER_SIZE - len_count))
-            if (len(header[-1]) == 0):
-              return None
-            len_count += len(header[-1])
-        header = ''.join(header)
+        self.socket = None
+        self.host = host
+        self.port = port
+        self._client_thread = threading.Thread(target=self._client_thread_function)
+        self._client_thread.daemon = True
 
-        base_message = MessageBase()
-        package = base_message.unpack(header)
-        body_size = package['body_size']
-        type = package['type']
+        self.lock_client_thread = threading.Lock()
 
-        body = []
-        len_count = 0
-        while len_count < body_size:
-            body.append(self.sock.recv(body_size - len_count))
-            if (len(body[-1]) == 0):
-              return None
-            len_count += len(body[-1])
-        body = ''.join(body)
+    def start(self):
+        if self._running:
+          return True
+        self._client_thread.start()
+        with self.lock_client_thread:
+            self.server_stop = False
+            self.server_running = False
+            self._running = True
+            self._connected = True
+        return True
 
-        message = None
-        if type == 'TRANSFORM':
-            message = TransformMessage(np.eye(4))
-        if type =='IMAGE':
-            message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
-        if type == 'STRING':
-            message = StringMessage("")
+    def stop(self):
+        if not self._running:
+          return True
 
-        message.unpack(header)
-        _, valid = message.unpack_body(body)
-        if not valid:
-            return None
-        return message
+        with self.lock_client_thread:
+          self.server_stop = True
 
-    def close(self):
-        self.sock.close()
+        while True:
+          with self.lock_client_thread:
+            if self.server_running:
+              return True
+
+        self._connected = False
+        return False
+
+    def _client_thread_function(self):
+        while True:
+
+            if self.socket is None:
+                self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.socket.settimeout(5.0)
+                self._connected = False
+
+            if not self._connected:
+                try:
+                  self.socket.connect((self.host, self.port))
+                  self._connected = True
+                except Exception as exp:
+                  self.socket = None
+
+            if not self._connected:
+             continue
+
+            if not self._receive_message_from_socket(self.socket):
+              self._connected = False
+              continue
+
+            self._send_queued_message_from_socket(self.socket)
+            with self.lock_client_thread:
+              if self.server_stop:
+                self.socket.close()
+                self.server_running = True
+                break
 
 class TCPRequestHandler(SocketServer.BaseRequestHandler):
     """
@@ -190,12 +316,19 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         self.server.update_connected_status(True)
         while True:
-            # print(len(self.server.message_queue))
+
+            # Receive
+            self.request.settimeout(0.01)
+            try:
+              self.server._receive_message_from_socket(self.request)
+            except Exception as exp:
+              pass
+
+            # Send
             if len(self.server.message_queue) > 0:
                 with self.server.lock_server_thread:
                     message = self.server.message_queue.popleft()
                     response_data = message.get_binary_message()
-                    # print "Send: " + str(message._timestamp)
                     try:
                         self.request.sendall(response_data)
                     except Exception as exp:
@@ -205,9 +338,8 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
             else:
                 time.sleep(1/1000.0)
                 with self.server.lock_server_thread:
-                    if self.server.shuttingdown:
+                    if self.server.server_stop:
                         break
-
 
 # Help functions and help classes:
 def _print(text):
@@ -449,10 +581,10 @@ class ImageMessage(MessageBase):
         dt = dt.newbyteorder(endian)
         data = np.frombuffer(values_img, dtype=dt)
 
-        data = np.squeeze(np.reshape(data, [size_y, size_x, size_z, numberOfComponents]))
+        self._data = np.squeeze(np.reshape(data, [size_y, size_x, size_z, numberOfComponents]))
 
-        return {'type': 'IMAGE',
-                'data': data}, True
+        valid = True
+        return valid
 
 
 class TransformMessage(MessageBase):
@@ -549,9 +681,7 @@ class TransformMessage(MessageBase):
                                    [0, 0, 0, 1]])
 
         valid = True
-
-        return {'type': 'TRANSFORM',
-                'data': self._matrix}, valid
+        return valid
 
 class StringMessage(MessageBase):
     def __init__(self, string, timestamp=None, device_name='', encoding=3):
@@ -582,9 +712,7 @@ class StringMessage(MessageBase):
         self._string = str(message[header_portion_len:])
 
         valid = True
-
-        return {'type': 'STRING',
-                'data': self._string}, valid
+        return valid
 
 class ImageMessageMatlab(ImageMessage):
     def __init__(self, image, dim, spacing=[1, 1, 1], timestamp=None):
@@ -645,7 +773,8 @@ if __name__ == "__main__":
     """
     if len(sys.argv) == 1:
         print("\n\n   Run as server, sending random data\n\n  ")
-        server = PyIGTLink(localServer=True)
+        server = PyIGTLinkServer(localServer=True)
+        server.start()
 
         samples = 500
         beams = 100
@@ -660,14 +789,19 @@ if __name__ == "__main__":
                 image_message = ImageMessage(_data, device_name="ImageMessage")
                 transform_message = TransformMessage(np.random.rand(4,4).astype(dtype=np.float32), device_name="TransformMessage")
                 string_message = StringMessage("TestingString_"+str(k), device_name="StringMessage")
-                server.add_message_to_send_queue(image_message)
-                server.add_message_to_send_queue(transform_message)
-                server.add_message_to_send_queue(string_message)
+                server.send_message(image_message)
+                server.send_message(transform_message)
+                server.send_message(string_message)
+                messages = server.get_latest_messages()
+                for message in messages:
+                  if message._type == "STRING":
+                    print(message._device_name)
+
             time.sleep(0.1)
 
     elif len(sys.argv) == 2:
         print("\n\n   Run as server, sending moving circle \n\n  ")
-        server = PyIGTLink(localServer=True)
+        server = PyIGTLinkServer(localServer=True)
 
         n = 500
         r = 90
@@ -688,5 +822,5 @@ if __name__ == "__main__":
                 print(_data.shape)
 
                 image_message = ImageMessage(_data, device_name="OpenIGTLink")
-                server.add_message_to_send_queue(image_message)
+                server._add_message_to_send_queue(image_message)
             time.sleep(0.1)
