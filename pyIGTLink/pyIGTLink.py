@@ -262,7 +262,6 @@ class PyIGTLinkClient(PyIGTLink):
             self.server_stop = False
             self.server_running = False
             self._running = True
-            self._connected = True
         return True
 
     def stop(self):
@@ -449,46 +448,46 @@ class ImageMessage(MessageBase):
             self._timestamp = timestamp
 
         try:
-            self._data = np.asarray(image)
+            self._image = np.asarray(image)
         except Exception as exp:
             _print('ERROR, INVALID IMAGE. \n' + str(exp))
             self._valid_message = False
             return
 
-        if len(self._data.shape) < 2:
+        if len(self._image.shape) < 2:
             self._valid_message = False
             _print('ERROR, INVALID IMAGE SIZE. \n')
             return
 
 
 # Only int8 is supported now
-#        if self._data.dtype == np.int8:
+#        if self._image.dtype == np.int8:
 #            self._datatype_s = 2
 #            self._format_data = "b"
-#        elif self._data.dtype == np.uint8:
+#        elif self._image.dtype == np.uint8:
 #            self._datatype_s = 3
 #            self._format_data = "B"
-#        elif self._data.dtype == np.int16:
+#        elif self._image.dtype == np.int16:
 #            self._datatype_s = 4
 #            self._format_data = "h"
-#        elif self._data.dtype == np.uint16:
+#        elif self._image.dtype == np.uint16:
 #            self._datatype_s = 5
 #            self._format_data = "H"
-#        elif self._data.dtype == np.int32:
+#        elif self._image.dtype == np.int32:
 #            self._datatype_s = 6
 #            self._format_data = "i"
-#        elif self._data.dtype == np.uint32:
+#        elif self._image.dtype == np.uint32:
 #            self._datatype_s = 7
 #            self._format_data = "I"
-#        elif self._data.dtype == np.float32:
+#        elif self._image.dtype == np.float32:
 #            self._datatype_s = 10
 #            self._format_data = "f"
-#        elif self._data.dtype == np.float64:
+#        elif self._image.dtype == np.float64:
 #            self._datatype_s = 11
 #            self._format_data = "f"
 #        else:
 #            pass
-        self._data = np.array(self._data, dtype=np.uint8)
+        self._image = np.array(self._image, dtype=np.uint8)
         self._datatype_s = 3
         self._format_data = "B"
 
@@ -498,25 +497,25 @@ class ImageMessage(MessageBase):
     def pack_body(self):
         binary_message = struct.pack(self._endian+"H", IGTL_IMAGE_HEADER_VERSION)
         # Number of Image Components (1:Scalar, >1:Vector). (NOTE: Vector data is stored fully interleaved.)
-        binary_message += struct.pack(self._endian+"B", len(self._data.shape) - 1)
+        binary_message += struct.pack(self._endian+"B", len(self._image.shape) - 1)
         binary_message += struct.pack(self._endian+"B", self._datatype_s)
 
-        if self._data.dtype.byteorder == "<":
+        if self._image.dtype.byteorder == "<":
             byteorder = "F"
             binary_message += struct.pack(self._endian+"B", 2)  # Endian for image data (1:BIG 2:LITTLE)
             # (NOTE: values in image header is fixed to BIG endian)
         else:
-            self._data.dtype.byteorder == ">"
+            self._image.dtype.byteorder == ">"
             byteorder = "C"
             binary_message += struct.pack(self._endian+"B", 1)  # Endian for image data (1:BIG 2:LITTLE)
             # (NOTE: values in image header is fixed to BIG endian)
 
         binary_message += struct.pack(self._endian+"B", 1)  # image coordinate (1:RAS 2:LPS)
 
-        binary_message += struct.pack(self._endian+"H", self._data.shape[1])
-        binary_message += struct.pack(self._endian+"H", self._data.shape[0])
-        if len(self._data.shape) > 2:
-            binary_message += struct.pack(self._endian+"H", self._data.shape[2])
+        binary_message += struct.pack(self._endian+"H", self._image.shape[1])
+        binary_message += struct.pack(self._endian+"H", self._image.shape[0])
+        if len(self._image.shape) > 2:
+            binary_message += struct.pack(self._endian+"H", self._image.shape[2])
         else:
             binary_message += struct.pack(self._endian+"H", 1)
 
@@ -547,14 +546,14 @@ class ImageMessage(MessageBase):
         binary_message += struct.pack(self._endian+"H", 0)      # Starting index of subvolume
         binary_message += struct.pack(self._endian+"H", 0)      # Starting index of subvolume
 
-        binary_message += struct.pack(self._endian+"H", self._data.shape[0])  # number of pixels of subvolume
-        binary_message += struct.pack(self._endian+"H", self._data.shape[1])
-        if len(self._data.shape) > 2:
-            binary_message += struct.pack(self._endian+"H", self._data.shape[2])
+        binary_message += struct.pack(self._endian+"H", self._image.shape[0])  # number of pixels of subvolume
+        binary_message += struct.pack(self._endian+"H", self._image.shape[1])
+        if len(self._image.shape) > 2:
+            binary_message += struct.pack(self._endian+"H", self._image.shape[2])
         else:
             binary_message += struct.pack(self._endian+"H", 1)
 
-        binary_message += self._data.tostring(byteorder)  # struct.pack(fmt,*data)
+        binary_message += self._image.tostring(byteorder)  # struct.pack(fmt,*data)
         self._body_pack_size = len(binary_message)
 
         self._binary_body = binary_message
@@ -581,7 +580,7 @@ class ImageMessage(MessageBase):
         dt = dt.newbyteorder(endian)
         data = np.frombuffer(values_img, dtype=dt)
 
-        self._data = np.squeeze(np.reshape(data, [size_y, size_x, size_z, numberOfComponents]))
+        self._image = np.squeeze(np.reshape(data, [size_y, size_x, size_z, numberOfComponents]))
 
         valid = True
         return valid
@@ -604,50 +603,48 @@ class TransformMessage(MessageBase):
             self._timestamp = timestamp
 
         try:
-            self._data = np.asarray(tform, dtype=np.float32)
+            self._matrix = np.asarray(tform, dtype=np.float32)
         except Exception as exp:
             _print('ERROR, INVALID TRANSFORM. \n' + str(exp))
             self._valid_message = False
             return
 
-        if len(self._data.shape) != 2:
+        if len(self._matrix.shape) != 2:
             self._valid_message = False
             _print('ERROR, INVALID TRANSFORM SIZE. \n')
             return
 
 
 # transforms are floats
-#        if self._data.dtype == np.int8:
+#        if self._matrix.dtype == np.int8:
 #            self._datatype_s = 2
 #            self._format_data = "b"
-#        elif self._data.dtype == np.uint8:
+#        elif self._matrix.dtype == np.uint8:
 #            self._datatype_s = 3
 #            self._format_data = "B"
-#        elif self._data.dtype == np.int16:
+#        elif self._matrix.dtype == np.int16:
 #            self._datatype_s = 4
 #            self._format_data = "h"
-#        elif self._data.dtype == np.uint16:
+#        elif self._matrix.dtype == np.uint16:
 #            self._datatype_s = 5
 #            self._format_data = "H"
-#        elif self._data.dtype == np.int32:
+#        elif self._matrix.dtype == np.int32:
 #            self._datatype_s = 6
 #            self._format_data = "i"
-#        elif self._data.dtype == np.uint32:
+#        elif self._matrix.dtype == np.uint32:
 #            self._datatype_s = 7
 #            self._format_data = "I"
-#        elif self._data.dtype == np.float32:
+#        elif self._matrix.dtype == np.float32:
 #            self._datatype_s = 10
 #            self._format_data = "f"
-#        elif self._data.dtype == np.float64:
+#        elif self._matrix.dtype == np.float64:
 #            self._datatype_s = 11
 #            self._format_data = "f"
 #        else:
 #            pass
-        self._data = np.array(self._data, dtype=np.float32)
+        self._matrix = np.array(self._matrix, dtype=np.float32) # A matrix representing the origin pose.
         self._datatype_s = 10
         self._format_data = "f"
-
-        self._matrix = self._data  # A matrix representing the origin pose.
 
     def pack_body(self):
         # binary_message = struct.pack(self._endian+"H", IGTL_TRANSFORM_HEADER_VERSION)
@@ -794,8 +791,13 @@ if __name__ == "__main__":
                 server.send_message(string_message)
                 messages = server.get_latest_messages()
                 for message in messages:
+                  print(message._device_name)
                   if message._type == "STRING":
-                    print(message._device_name)
+                    print ("    " + message._string)
+                  if message._type == "TRANSFORM":
+                    print ("    " + str(message._matrix))
+                  if message._type == "IMAGE":
+                    print ("    " + str(message._image))
 
             time.sleep(0.1)
 
