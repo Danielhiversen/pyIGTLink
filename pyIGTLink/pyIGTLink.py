@@ -25,6 +25,7 @@ else:
 IGTL_HEADER_VERSION = 1
 IGTL_IMAGE_HEADER_VERSION = 1
 IGTL_HEADER_SIZE = 58
+IGTL_EXTENDED_HEADER_SIZE = 12
 
 IGTL_TYPE_UNDEFINED = "?"
 IGTL_TYPE_SERVER = "S"
@@ -111,37 +112,46 @@ class PyIGTLink():
   def _receive_message_from_socket(self, socket):
       header = []
       len_count = 0
+      header = b""
       while len_count < IGTL_HEADER_SIZE:
-          header.append(socket.recv(IGTL_HEADER_SIZE - len_count))
-          if (len(header[-1]) == 0):
+          header += socket.recv(IGTL_HEADER_SIZE - len_count)
+          if (len(header) == 0):
             return False
-          len_count += len(header[-1])
-      header = ''.join(header)
-
+          len_count = len(header) 
+          
       base_message = MessageBase()
       package = base_message.unpack(header)
       body_size = package['body_size']
       type = package['type']
 
-      body = []
+      body = b""
       len_count = 0
       while len_count < body_size:
-          body.append(socket.recv(body_size - len_count))
-          if (len(body[-1]) == 0):
+          body += socket.recv(body_size - len_count)
+          if (len(body) == 0):
             return False
-          len_count += len(body[-1])
-      body = ''.join(body)
+          len_count = len(body)
+      try:
+        message = None
+        if type == "TRANSFORM":
+            message = TransformMessage(np.eye(4))
+        if type == "IMAGE":
+            message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
+        if type == "STRING":
+            message = StringMessage("")
+      except Exception as e:
+        print(e)
 
-      message = None
-      if type == 'TRANSFORM':
-          message = TransformMessage(np.eye(4))
-      if type =='IMAGE':
-          message = ImageMessage(np.zeros((2, 2), dtype=np.uint8))
-      if type == 'STRING':
-          message = StringMessage("")
+      if message is None:
+        #TODO: error message
+        return False
 
-      message.unpack(header)
-      valid = message.unpack_body(body)
+      try:
+        message.unpack(header)
+        valid = message.unpack_body(body)
+      except Exception as e:
+        print(e)
+
       if not valid:
           return False
 
@@ -291,7 +301,7 @@ class PyIGTLinkClient(PyIGTLink):
 
             if self.socket is None:
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.socket.settimeout(0.001)
+                self.socket.settimeout(0.1)
                 self._connected = False
 
             if not self._connected:
@@ -321,7 +331,7 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
         self.server.update_connected_status(True)
         while True:
             # Receive
-            self.request.settimeout(0.001)
+            self.request.settimeout(5)
             try:
               self.server._receive_message_from_socket(self.request)
             except Exception as exp:
@@ -369,6 +379,7 @@ class MessageBase(object):
         self._endian = ">"  # big-endian
         self.crc = None
 
+        self._metadata_size = 0
         self._binary_body = None
         self._binary_head = None
         self._body_pack_size = 0
@@ -393,25 +404,33 @@ class MessageBase(object):
         s = struct.Struct('> H 12s 20s II Q Q')  # big-endian
         values = s.unpack(message)
         self._version = values[0]
-        self._type = filter(lambda x: x in string.printable, values[1])
-        self._device_name = filter(lambda x: x in string.printable, values[2])
+
+        self._type = values[1].decode().rstrip(' \t\r\n\0')
+        self._device_name = values[2].decode().rstrip(' \t\r\n\0')
 
         seconds = float(values[3])
-        frac_of_second = values[4]
-        nanoseconds = float(_igtl_frac_to_nanosec(frac_of_second))
+        frac_of_second = int(values[4])
 
-        timestamp = seconds + (nanoseconds * 1e-9)
+        nanoseconds = float(_igtl_frac_to_nanosec(frac_of_second))
+        self._timestamp = seconds + (nanoseconds * 1e-9)
 
         self._body_size = values[5]
-
         valid = False
-
         return {'type': self._type,
                 'device_name': self._device_name,
                 'timestamp': self._timestamp,
                 'valid': valid,
-                'body_size': self._body_size,
-                'timestamp': timestamp,}
+                'body_size': self._body_size}
+                
+    def unpack_extended_header(self, message):
+        s = struct.Struct('> H H I I')  # big-endian
+        values = s.unpack(message)
+        self._extended_header_size = values[0]
+        self._metadata_header_size = values[1]
+        self._metadata_size = values[2]
+        self._message_id = values[3]
+        return {'metadata_size': self._metadata_size,
+                'message_id': self._message_id,}
 
     def get_binary_message(self):
         if not self._binary_head:
@@ -450,6 +469,7 @@ class ImageMessage(MessageBase):
         self._device_name = device_name
         if timestamp:
             self._timestamp = timestamp
+        self._metadata_size = 0
 
         try:
             self._image = np.asarray(image)
@@ -501,7 +521,7 @@ class ImageMessage(MessageBase):
     def pack_body(self):
         binary_message = struct.pack(self._endian+"H", IGTL_IMAGE_HEADER_VERSION)
         # Number of Image Components (1:Scalar, >1:Vector). (NOTE: Vector data is stored fully interleaved.)
-        binary_message += struct.pack(self._endian+"B", len(self._image.shape) - 1)
+        binary_message += struct.pack(self._endian+"B", self._image.shape[3])
         binary_message += struct.pack(self._endian+"B", self._datatype_s)
 
         if self._image.dtype.byteorder == "<":
@@ -516,12 +536,9 @@ class ImageMessage(MessageBase):
 
         binary_message += struct.pack(self._endian+"B", 1)  # image coordinate (1:RAS 2:LPS)
 
+        binary_message += struct.pack(self._endian+"H", self._image.shape[2])
         binary_message += struct.pack(self._endian+"H", self._image.shape[1])
         binary_message += struct.pack(self._endian+"H", self._image.shape[0])
-        if len(self._image.shape) > 2:
-            binary_message += struct.pack(self._endian+"H", self._image.shape[2])
-        else:
-            binary_message += struct.pack(self._endian+"H", 1)
 
         origin = np.zeros(3)
         norm_i = np.zeros(3)
@@ -562,29 +579,34 @@ class ImageMessage(MessageBase):
 
         self._binary_body = binary_message
 
-    def unpack_body(self, message):
-        header_portion_len = 12 + (12 * 4) + 12
+    def unpack_body(self, body):
 
+        if self._version > 1:      
+          len_count = 0
+          self.unpack_extended_header(body[:IGTL_EXTENDED_HEADER_SIZE])
+
+        header_portion_len = 12 + (12 * 4) + 12
         s_head = \
             struct.Struct('> H B B B B H H H f f f f f f f f f f f f H H H H H H')
-        values_header = s_head.unpack(message[:header_portion_len])
+        values_header = s_head.unpack(body[self._extended_header_size:self._extended_header_size + header_portion_len])
 
         numberOfComponents = values_header[1]
         endian = values_header[3]
         size_x = values_header[23]
         size_y = values_header[24]
         size_z = values_header[25]
+        
         if endian == 2:
             endian = '<'
         else:
             endian = '>'
-        values_img = message[header_portion_len:]
 
+        values_img = body[self._extended_header_size + header_portion_len:-(self._metadata_size+self._metadata_header_size)]
         dt = np.dtype(np.uint8)
         dt = dt.newbyteorder(endian)
         data = np.frombuffer(values_img, dtype=dt)
 
-        self._image = np.squeeze(np.reshape(data, [size_y, size_x, size_z, numberOfComponents]))
+        self._image = np.reshape(data, [size_z, size_y, size_x, numberOfComponents])
 
         valid = True
         return valid
@@ -699,7 +721,7 @@ class StringMessage(MessageBase):
     def pack_body(self):
         binary_message = struct.pack(self._endian+"H", self._encoding)
         binary_message += struct.pack(self._endian+"H", len(self._string))
-        binary_message += self._string
+        binary_message += self._string.encode("utf-8")
 
         self._body_pack_size = len(binary_message)
         self._binary_body = binary_message
