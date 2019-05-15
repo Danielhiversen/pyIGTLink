@@ -584,6 +584,9 @@ class ImageMessage(MessageBase):
         if self._version > 1:      
           len_count = 0
           self.unpack_extended_header(body[:IGTL_EXTENDED_HEADER_SIZE])
+        else:
+          self._extended_header_size=0
+          self._metadata_header_size=0
 
         header_portion_len = 12 + (12 * 4) + 12
         s_head = \
@@ -601,7 +604,11 @@ class ImageMessage(MessageBase):
         else:
             endian = '>'
 
-        values_img = body[self._extended_header_size + header_portion_len:-(self._metadata_size+self._metadata_header_size)]
+        if self._metadata_size + self._metadata_header_size > 0:
+          values_img = body[self._extended_header_size + header_portion_len:-(self._metadata_size+self._metadata_header_size)]
+        else:
+          values_img = body[self._extended_header_size + header_portion_len:]
+
         dt = np.dtype(np.uint8)
         dt = dt.newbyteorder(endian)
         data = np.frombuffer(values_img, dtype=dt)
