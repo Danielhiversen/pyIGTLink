@@ -33,20 +33,20 @@ IGTL_TYPE_CLIENT = "C"
 
 class PyIGTLink():
 
-  buffer_size = 100
-  server_stop = False
-  server_running = False
-
-  connection_type = IGTL_TYPE_UNDEFINED
-
-  _shut_down = False
-  _running = False
-  _connected = False
-
-  incoming_messages = {}
-  message_queue = collections.deque(maxlen=buffer_size)
-
   def __init__(self):
+      self.buffer_size = 100
+      self.server_stop = False
+      self.server_running = False
+
+      self.connection_type = IGTL_TYPE_UNDEFINED
+
+      self._shut_down = False
+      self._running = False
+      self._connected = False
+
+      self.incoming_messages = {}
+      self.message_queue = collections.deque(maxlen=self.buffer_size)
+
       self.lock_received_messages = threading.Lock()
       self.lock_server_thread = threading.Lock()
 
@@ -117,8 +117,8 @@ class PyIGTLink():
           header += socket.recv(IGTL_HEADER_SIZE - len_count)
           if (len(header) == 0):
             return False
-          len_count = len(header) 
-          
+          len_count = len(header)
+
       base_message = MessageBase()
       package = base_message.unpack(header)
       body_size = package['body_size']
@@ -176,7 +176,7 @@ class PyIGTLinkServer(SocketServer.TCPServer, PyIGTLink):
         """
         PyIGTLink.__init__(self)
 
-        connection_type = IGTL_TYPE_SERVER
+        self.connection_type = IGTL_TYPE_SERVER
 
         if localServer:
             host = "127.0.0.1"
@@ -329,30 +329,22 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
     """
     def handle(self):
         self.server.update_connected_status(True)
-        while True:
-            # Receive
-            self.request.settimeout(5)
-            try:
-              self.server._receive_message_from_socket(self.request)
-            except Exception as exp:
-              pass
+        self.request.settimeout(0.1)
+        try:
+            self.server._receive_message_from_socket(self.request)
+        except Exception as exp:
+            pass
 
-            # Send
-            if len(self.server.message_queue) > 0:
-                with self.server.lock_server_thread:
-                    message = self.server.message_queue.popleft()
-                    response_data = message.get_binary_message()
-                    try:
-                        self.request.sendall(response_data)
-                    except Exception as exp:
-                        self.server.update_connected_status(False)
-                        _print('ERROR, FAILED TO SEND DATA. \n'+str(exp))
-                        return
-            else:
-                time.sleep(1/1000.0)
-                with self.server.lock_server_thread:
-                    if self.server.server_stop:
-                        break
+        # Send
+        if len(self.server.message_queue) > 0:
+            with self.server.lock_server_thread:
+                message = self.server.message_queue.popleft()
+                response_data = message.get_binary_message()
+                try:
+                    self.request.sendall(response_data)
+                except Exception as exp:
+                    self.server.update_connected_status(False)
+                    _print('ERROR, FAILED TO SEND DATA. \n'+str(exp))
 
 # Help functions and help classes:
 def _print(text):
@@ -421,7 +413,7 @@ class MessageBase(object):
                 'timestamp': self._timestamp,
                 'valid': valid,
                 'body_size': self._body_size}
-                
+
     def unpack_extended_header(self, message):
         s = struct.Struct('> H H I I')  # big-endian
         values = s.unpack(message)
@@ -581,7 +573,7 @@ class ImageMessage(MessageBase):
 
     def unpack_body(self, body):
 
-        if self._version > 1:      
+        if self._version > 1:
           len_count = 0
           self.unpack_extended_header(body[:IGTL_EXTENDED_HEADER_SIZE])
         else:
@@ -598,7 +590,7 @@ class ImageMessage(MessageBase):
         size_x = values_header[23]
         size_y = values_header[24]
         size_z = values_header[25]
-        
+
         if endian == 2:
             endian = '<'
         else:
