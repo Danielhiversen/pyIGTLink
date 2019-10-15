@@ -349,6 +349,51 @@ class ImageMessage(MessageBase):
         self._binary_body = binary_message
 
 
+class Tdata(MessageBase):
+    def __init__(self, msg, timestamp=None, device_name=''):
+        MessageBase.__init__(self)
+        self._valid_message = True
+        self._name = "TDATA"
+        self._device_name = device_name
+        if timestamp:
+            self._timestamp = timestamp
+
+        self._data = np.asarray(msg, dtype=np.float32)
+
+        self._data = np.array(self._data, dtype=np.float32)
+
+        self._format_data = "f"
+
+        self._matrix = self._data  # A matrix representing the origin pose.
+        self._body_type = 4
+        self._body_name = "input0"
+        self._body_reserved = 5
+
+    def pack_body(self):
+        binary_message = struct.pack(self._endian + "20s", self._body_name.encode('utf-8'))
+        binary_message += struct.pack(self._endian + "B", self._body_type)
+        binary_message += struct.pack(self._endian + "B", self._body_reserved)
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[0, 0])  # R11
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[1, 0])  # R21
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[2, 0])  # R31
+
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[0, 1])  # R12
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[1, 1])  # R22
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[2, 1])  # R32
+
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[0, 2])  # R13
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[1, 2])  # R23
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[2, 2])  # R33
+
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[0, 3])  # TX
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[1, 3])  # TY
+        binary_message += struct.pack(self._endian + self._format_data, self._matrix[2, 3])  # TZ
+
+        self._body_pack_size = len(binary_message)
+
+        self._binary_body = binary_message
+
+
 class TransformMessage(MessageBase):
     def __init__(self, tform, timestamp=None, device_name=''):
         """
