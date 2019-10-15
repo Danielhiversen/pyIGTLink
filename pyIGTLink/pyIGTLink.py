@@ -27,6 +27,7 @@ IGTL_IMAGE_HEADER_VERSION = 1
 
 class PyIGTLink(SocketServer.TCPServer):
     """ For streaming data over TCP with IGTLink"""
+
     def __init__(self, port=18944, localServer=False, iface='eth0'):
         """
         port - port number
@@ -44,7 +45,7 @@ class PyIGTLink(SocketServer.TCPServer):
                     ifname = iface
                     host = socket.inet_ntoa(fcntl.ioctl(soc.fileno(), 0x8915, struct.pack('256s', ifname[:15]))[20:24])
                     # http://code.activestate.com/recipes/439094-get-the-ip-address-associated-with-a-network-inter/
-                except: # noqa
+                except:  # noqa
                     ifname = 'lo'
                     host = socket.inet_ntoa(fcntl.ioctl(soc.fileno(), 0x8915, struct.pack('256s', ifname[:15]))[20:24])
             else:
@@ -122,7 +123,8 @@ class PyIGTLink(SocketServer.TCPServer):
             while not self._connected:
                 with self.lock_server_thread:
                     if self.shuttingdown:
-                        _print("No connections\nIp adress: " + str(self.get_ip_adress()) + "\nPort number: " + str(self.get_port_no()))
+                        _print("No connections\nIp adress: " + str(self.get_ip_adress()) + "\nPort number: " + str(
+                            self.get_port_no()))
                         break
                 time.sleep(5)
             time.sleep(10)
@@ -135,6 +137,7 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
     """
     Help class for PyIGTLink
     """
+
     def handle(self):
         self.server.update_connected_status(True)
         while True:
@@ -148,10 +151,10 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
                         self.request.sendall(response_data)
                     except Exception as exp:
                         self.server.update_connected_status(False)
-                        _print('ERROR, FAILED TO SEND DATA. \n'+str(exp))
+                        _print('ERROR, FAILED TO SEND DATA. \n' + str(exp))
                         return
             else:
-                time.sleep(1/1000.0)
+                time.sleep(1 / 1000.0)
                 with self.server.lock_server_thread:
                     if self.server.shuttingdown:
                         break
@@ -165,6 +168,7 @@ def _print(text):
 # http://openigtlink.org/protocols/v2_header.html
 class MessageBase(object):
     """message"""
+
     def __init__(self):
         self._valid_message = False
         # Version number The version number field specifies the header format version. Currently the version number is 1.
@@ -190,13 +194,13 @@ class MessageBase(object):
         body_size = self.get_body_pack_size()
         crc = CRC64(binary_body)
         _timestamp1 = int(self._timestamp / 1000)
-        _timestamp2 = _igtl_nanosec_to_frac(int((self._timestamp / 1000.0 - _timestamp1)*10**9))
-        binary_message = struct.pack(self._endian+"H", self._version)
-        binary_message = binary_message + struct.pack(self._endian+"12s", self._name.encode('utf-8'))
-        binary_message = binary_message + struct.pack(self._endian+"20s", self._device_name.encode('utf-8'))
-        binary_message = binary_message + struct.pack(self._endian+"II", _timestamp1, _timestamp2)
-        binary_message = binary_message + struct.pack(self._endian+"Q", body_size)
-        binary_message = binary_message + struct.pack(self._endian+"Q", crc)
+        _timestamp2 = _igtl_nanosec_to_frac(int((self._timestamp / 1000.0 - _timestamp1) * 10 ** 9))
+        binary_message = struct.pack(self._endian + "H", self._version)
+        binary_message = binary_message + struct.pack(self._endian + "12s", self._name.encode('utf-8'))
+        binary_message = binary_message + struct.pack(self._endian + "20s", self._device_name.encode('utf-8'))
+        binary_message = binary_message + struct.pack(self._endian + "II", _timestamp1, _timestamp2)
+        binary_message = binary_message + struct.pack(self._endian + "Q", body_size)
+        binary_message = binary_message + struct.pack(self._endian + "Q", crc)
 
         self._binary_head = binary_message
 
@@ -285,29 +289,29 @@ class ImageMessage(MessageBase):
         self._matrix = np.identity(4)  # A matrix representing the origin and the orientation of the image.
 
     def pack_body(self):
-        binary_message = struct.pack(self._endian+"H", IGTL_IMAGE_HEADER_VERSION)
+        binary_message = struct.pack(self._endian + "H", IGTL_IMAGE_HEADER_VERSION)
         # Number of Image Components (1:Scalar, >1:Vector). (NOTE: Vector data is stored fully interleaved.)
-        binary_message += struct.pack(self._endian+"B", len(self._data.shape) - 1)
-        binary_message += struct.pack(self._endian+"B", self._datatype_s)
+        binary_message += struct.pack(self._endian + "B", len(self._data.shape) - 1)
+        binary_message += struct.pack(self._endian + "B", self._datatype_s)
 
         if self._data.dtype.byteorder == "<":
             byteorder = "F"
-            binary_message += struct.pack(self._endian+"B", 2)  # Endian for image data (1:BIG 2:LITTLE)
+            binary_message += struct.pack(self._endian + "B", 2)  # Endian for image data (1:BIG 2:LITTLE)
             # (NOTE: values in image header is fixed to BIG endian)
         else:
             self._data.dtype.byteorder == ">"
             byteorder = "C"
-            binary_message += struct.pack(self._endian+"B", 1)  # Endian for image data (1:BIG 2:LITTLE)
+            binary_message += struct.pack(self._endian + "B", 1)  # Endian for image data (1:BIG 2:LITTLE)
             # (NOTE: values in image header is fixed to BIG endian)
 
-        binary_message += struct.pack(self._endian+"B", 1)  # image coordinate (1:RAS 2:LPS)
+        binary_message += struct.pack(self._endian + "B", 1)  # image coordinate (1:RAS 2:LPS)
 
-        binary_message += struct.pack(self._endian+"H", self._data.shape[1])
-        binary_message += struct.pack(self._endian+"H", self._data.shape[0])
+        binary_message += struct.pack(self._endian + "H", self._data.shape[1])
+        binary_message += struct.pack(self._endian + "H", self._data.shape[0])
         if len(self._data.shape) > 2:
-            binary_message += struct.pack(self._endian+"H", self._data.shape[2])
+            binary_message += struct.pack(self._endian + "H", self._data.shape[2])
         else:
-            binary_message += struct.pack(self._endian+"H", 1)
+            binary_message += struct.pack(self._endian + "H", 1)
 
         origin = np.zeros(3)
         norm_i = np.zeros(3)
@@ -319,29 +323,29 @@ class ImageMessage(MessageBase):
             norm_k[i] = self._matrix[i][2]
             origin[i] = self._matrix[i][3]
 
-        binary_message += struct.pack(self._endian+"f", norm_i[0] * self._spacing[0])
-        binary_message += struct.pack(self._endian+"f", norm_i[1] * self._spacing[0])
-        binary_message += struct.pack(self._endian+"f", norm_i[2] * self._spacing[0])
-        binary_message += struct.pack(self._endian+"f", norm_j[0] * self._spacing[1])
-        binary_message += struct.pack(self._endian+"f", norm_j[1] * self._spacing[1])
-        binary_message += struct.pack(self._endian+"f", norm_j[2] * self._spacing[1])
-        binary_message += struct.pack(self._endian+"f", norm_k[0] * self._spacing[2])
-        binary_message += struct.pack(self._endian+"f", norm_k[1] * self._spacing[2])
-        binary_message += struct.pack(self._endian+"f", norm_k[2] * self._spacing[2])
-        binary_message += struct.pack(self._endian+"f", origin[0])
-        binary_message += struct.pack(self._endian+"f", origin[1])
-        binary_message += struct.pack(self._endian+"f", origin[2])
+        binary_message += struct.pack(self._endian + "f", norm_i[0] * self._spacing[0])
+        binary_message += struct.pack(self._endian + "f", norm_i[1] * self._spacing[0])
+        binary_message += struct.pack(self._endian + "f", norm_i[2] * self._spacing[0])
+        binary_message += struct.pack(self._endian + "f", norm_j[0] * self._spacing[1])
+        binary_message += struct.pack(self._endian + "f", norm_j[1] * self._spacing[1])
+        binary_message += struct.pack(self._endian + "f", norm_j[2] * self._spacing[1])
+        binary_message += struct.pack(self._endian + "f", norm_k[0] * self._spacing[2])
+        binary_message += struct.pack(self._endian + "f", norm_k[1] * self._spacing[2])
+        binary_message += struct.pack(self._endian + "f", norm_k[2] * self._spacing[2])
+        binary_message += struct.pack(self._endian + "f", origin[0])
+        binary_message += struct.pack(self._endian + "f", origin[1])
+        binary_message += struct.pack(self._endian + "f", origin[2])
 
-        binary_message += struct.pack(self._endian+"H", 0)      # Starting index of subvolume
-        binary_message += struct.pack(self._endian+"H", 0)      # Starting index of subvolume
-        binary_message += struct.pack(self._endian+"H", 0)      # Starting index of subvolume
+        binary_message += struct.pack(self._endian + "H", 0)  # Starting index of subvolume
+        binary_message += struct.pack(self._endian + "H", 0)  # Starting index of subvolume
+        binary_message += struct.pack(self._endian + "H", 0)  # Starting index of subvolume
 
-        binary_message += struct.pack(self._endian+"H", self._data.shape[0])  # number of pixels of subvolume
-        binary_message += struct.pack(self._endian+"H", self._data.shape[1])
+        binary_message += struct.pack(self._endian + "H", self._data.shape[0])  # number of pixels of subvolume
+        binary_message += struct.pack(self._endian + "H", self._data.shape[1])
         if len(self._data.shape) > 2:
-            binary_message += struct.pack(self._endian+"H", self._data.shape[2])
+            binary_message += struct.pack(self._endian + "H", self._data.shape[2])
         else:
-            binary_message += struct.pack(self._endian+"H", 1)
+            binary_message += struct.pack(self._endian + "H", 1)
 
         binary_message += self._data.tostring(byteorder)  # struct.pack(fmt,*data)
         self._body_pack_size = len(binary_message)
@@ -437,7 +441,6 @@ class TransformMessage(MessageBase):
 
 class StringMessage(MessageBase):
     def __init__(self, string, timestamp=None, device_name='', encoding=3):
-
         MessageBase.__init__(self)
         self._valid_message = True
         self._name = "STRING"
@@ -448,8 +451,8 @@ class StringMessage(MessageBase):
         self._string = string
 
     def pack_body(self):
-        binary_message = struct.pack(self._endian+"H", self._encoding)
-        binary_message += struct.pack(self._endian+"H", len(self._string))
+        binary_message = struct.pack(self._endian + "H", self._encoding)
+        binary_message += struct.pack(self._endian + "H", len(self._string))
         binary_message += self._string
 
         self._body_pack_size = len(binary_message)
@@ -511,9 +514,9 @@ if __name__ == "__main__":
 
         while True:
             if server.is_connected():
-                k = k+1
+                k = k + 1
                 print(k)
-                _data = np.random.randn(samples, beams)*50+100
+                _data = np.random.randn(samples, beams) * 50 + 100
                 # data[:, :, 1] = data[:, :, 1] + 90
                 image_message = ImageMessage(_data)
                 transform_message = TransformMessage(np.eye(4).astype(dtype=np.float32))
@@ -531,12 +534,12 @@ if __name__ == "__main__":
         k = 0
         while True:
             if server.is_connected():
-                k = k+1
+                k = k + 1
                 print(k)
-                a = np.mod(10*k, n)
-                b = np.mod((400*k)/n+30, n)
-                y, x = np.ogrid[-a:n-a, -b:n-b]
-                mask = x*x + y*y <= r*r
+                a = np.mod(10 * k, n)
+                b = np.mod((400 * k) / n + 30, n)
+                y, x = np.ogrid[-a:n - a, -b:n - b]
+                mask = x * x + y * y <= r * r
 
                 _data = np.ones((n, n))
                 _data[mask] = 255
