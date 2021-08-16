@@ -93,7 +93,7 @@ class PyIGTLink(SocketServer.TCPServer):
         else:
             if len(self.message_queue) > 0:
                 with self.lock_server_thread:
-                    self.message_queue = collections.clear()
+                    self.message_queue.clear()
         return True
 
     def _signal_handler(self, signum, stackframe):
